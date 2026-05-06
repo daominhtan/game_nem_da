@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Generate Sprites</title>
+</head>
+<body>
+  <canvas id="canvas" width="256" height="256"></canvas>
+  <script>
+    const canvas = document.getElementById('canvas')
+    const ctx = canvas.getContext('2d')
+
+    function drawWarrior() {
+      // Simple warrior sprite 64x80
+      ctx.fillStyle = '#2196F3' // Blue
+      ctx.fillRect(16, 0, 32, 40) // Head
+      ctx.fillStyle = '#1565C0'
+      ctx.fillRect(8, 40, 48, 30) // Body
+      ctx.fillStyle = '#0D47A1'
+      ctx.fillRect(12, 70, 16, 10) // Left leg
+      ctx.fillRect(36, 70, 16, 10) // Right leg
+    }
+
+    function drawMage() {
+      ctx.fillStyle = '#9C27B0' // Purple
+      ctx.fillRect(16, 0, 32, 40)
+      ctx.fillStyle = '#7B1FA8'
+      ctx.fillRect(8, 40, 48, 30)
+      ctx.fillStyle = '#4A148C'
+      ctx.fillRect(12, 70, 16, 10)
+      ctx.fillRect(36, 70, 16, 10)
+    }
+
+    function drawSamurai() {
+      ctx.fillStyle = '#F44336' // Red
+      ctx.fillRect(16, 0, 32, 40)
+      ctx.fillStyle = '#D32F2F'
+      ctx.fillRect(8, 40, 48, 30)
+      ctx.fillStyle = '#B71C1C'
+      ctx.fillRect(12, 70, 16, 10)
+      ctx.fillRect(36, 70, 16, 10)
+    }
+
+    function drawBear() {
+      ctx.fillStyle = '#795548' // Brown
+      ctx.fillRect(12, 0, 40, 50) // Body
+      ctx.fillStyle = '#5D4037'
+      ctx.fillRect(8, 50, 16, 20) // Left leg
+      ctx.fillRect(40, 50, 16, 20) // Right leg
+    }
+
+    function drawRock() {
+      ctx.fillStyle = '#9E9E9E'
+      ctx.beginPath()
+      ctx.arc(16, 16, 12, 0, Math.PI * 2)
+      ctx.fill()
+    }
+
+    function drawBomb() {
+      ctx.fillStyle = '#212121'
+      ctx.beginPath()
+      ctx.arc(16, 14, 12, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.fillStyle = '#FF5722'
+      ctx.fillRect(14, 4, 4, 6)
+    }
+
+    function drawSoap() {
+      ctx.fillStyle = '#E1F5FE'
+      ctx.fillRect(8, 8, 16, 16)
+      ctx.fillStyle = '#B3E5FC'
+      ctx.fillRect(10, 10, 12, 12)
+    }
+
+    // Generate all sprites
+    const sprites = [
+      { name: 'warrior', draw: drawWarrior, frames: 25 },
+      { name: 'mage', draw: drawMage, frames: 25 },
+      { name: 'samurai', draw: drawSamurai, frames: 25 },
+      { name: 'bear', draw: drawBear, frames: 25 }
+    ]
+
+    sprites.forEach(sprite => {
+      // This is just a placeholder - in real game, use proper sprites
+      console.log(`Generated ${sprite.name}`)
+    })
+  </script>
+</body>
+</html>
