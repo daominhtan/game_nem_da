@@ -1,5 +1,5 @@
 import Phaser from 'phaser'
-import { PHYSICS } from '/home/lap16851/dev/myopencode/game-nem-da/shared/src/constants'
+import { PHYSICS, GAME_CONFIG } from '@nem-da/shared/constants'
 
 export default class ProjectileSystem {
   private scene: Phaser.Scene
@@ -20,6 +20,9 @@ export default class ProjectileSystem {
     proj.setData('ownerId', projData.ownerId)
     proj.setData('projectileId', projectileId)
     proj.setData('type', projData.type)
+    // Match server gravity (world gravity is 300, add 680 to reach 980)
+    const body = proj.body as Phaser.Physics.Arcade.Body
+    if (body) body.setGravityY(680)
 
     // Add trail
     this.addTrail(proj, projData.type)
@@ -72,8 +75,15 @@ export default class ProjectileSystem {
     })
   }
 
-  update() {
-    // Cleanup already-scheduled via time events
+  update() { }
+
+  syncProjectiles(serverProjectiles: Map<string, any>) {
+    const activeIds = new Set(serverProjectiles.keys())
+    this.projectiles.forEach((_, id) => {
+      if (!activeIds.has(id)) {
+        this.destroyProjectile(id)
+      }
+    })
   }
 
   hasProjectile(id: string): boolean {
@@ -97,5 +107,3 @@ export default class ProjectileSystem {
     return this.projectiles.get(id)
   }
 }
-
-const GAME_CONFIG = { groundLevel: 580 }

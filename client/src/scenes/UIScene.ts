@@ -7,6 +7,7 @@ export default class UIScene extends Phaser.Scene {
   private windIndicator?: Phaser.GameObjects.Text
   private p1HpBar?: Phaser.GameObjects.Graphics
   private p2HpBar?: Phaser.GameObjects.Graphics
+  private roundCircles?: Phaser.GameObjects.Graphics
 
   constructor() {
     super('UIScene')
@@ -16,38 +17,25 @@ export default class UIScene extends Phaser.Scene {
   create() {
     const { width } = this.cameras.main
 
-    // Timer display
+    this.roundCircles = this.add.graphics().setDepth(1000)
+
     this.timerText = this.add.text(width / 2, 20, '15', {
-      fontSize: '48px',
-      color: '#00ff00',
-      stroke: '#000',
-      strokeThickness: 4
+      fontSize: '48px', color: '#00ff00', stroke: '#000', strokeThickness: 4
     }).setOrigin(0.5).setDepth(1000)
 
-    // Wind indicator
     this.windIndicator = this.add.text(width / 2, 60, 'Gió: 0', {
-      fontSize: '20px',
-      color: '#ffffff'
+      fontSize: '20px', color: '#ffffff'
     }).setOrigin(0.5).setDepth(1000)
 
-    // Player 1 HP bar (left)
     this.p1HpBar = this.add.graphics().setDepth(1000)
     this.add.text(20, 20, 'Player 1', {
-      fontSize: '18px',
-      color: '#2196F3'
+      fontSize: '18px', color: '#2196F3'
     }).setDepth(1000)
 
-    // Player 2 HP bar (right)
     this.p2HpBar = this.add.graphics().setDepth(1000)
     this.add.text(width - 20, 20, 'Player 2', {
-      fontSize: '18px',
-      color: '#F44336'
+      fontSize: '18px', color: '#F44336'
     }).setOrigin(1, 0).setDepth(1000)
-
-    // Round indicator (best of 3)
-    for (let i = 0; i < 3; i++) {
-      this.add.circle(width / 2 - 30 + i * 25, 80, 8, 0x666666, 0.5).setDepth(1000)
-    }
   }
 
   update() {
@@ -80,8 +68,27 @@ export default class UIScene extends Phaser.Scene {
       this.windIndicator.setText(`Gió: ${Math.abs(windForce)} ${windDir}`)
     }
 
-    // Update HP bars
     this.updateHPBars()
+    this.updateRoundIndicators(state)
+  }
+
+  private updateRoundIndicators(state: any) {
+    if (!this.roundCircles) return
+    const { width } = this.cameras.main
+    const cx = width / 2
+    const cy = 80
+    this.roundCircles.clear()
+
+    for (let i = 0; i < 3; i++) {
+      const x = cx - 30 + i * 25
+      const p1Won = i < (state.p1RoundsWon || 0)
+      const p2Won = i < (state.p2RoundsWon || 0)
+
+      this.roundCircles.fillStyle(p1Won ? 0x2196F3 : p2Won ? 0xF44336 : 0x666666, 0.7)
+      this.roundCircles.fillCircle(x, cy, 8)
+      this.roundCircles.lineStyle(2, 0xffffff, 0.5)
+      this.roundCircles.strokeCircle(x, cy, 8)
+    }
   }
 
   private updateHPBars() {
@@ -91,7 +98,6 @@ export default class UIScene extends Phaser.Scene {
     const players = Array.from(room.state.players.values()) as any[]
     if (players.length < 2) return
 
-    // Player 1 HP
     if (this.p1HpBar) {
       const p1 = players[0]
       const p1HpPercent = p1.hp / p1.maxHp
@@ -102,7 +108,6 @@ export default class UIScene extends Phaser.Scene {
       this.p1HpBar.fillRect(20, 45, 200 * p1HpPercent, 15)
     }
 
-    // Player 2 HP
     if (this.p2HpBar) {
       const p2 = players[1]
       const p2HpPercent = p2.hp / p2.maxHp

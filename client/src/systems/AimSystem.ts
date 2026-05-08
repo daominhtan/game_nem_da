@@ -1,5 +1,5 @@
 import Phaser from 'phaser'
-import { PHYSICS } from '/home/lap16851/dev/myopencode/game-nem-da/shared/src/constants'
+import { PHYSICS } from '@nem-da/shared/constants'
 
 export default class AimSystem {
   private scene: Phaser.Scene
@@ -14,9 +14,14 @@ export default class AimSystem {
   private power: number = 0.5
   private facingLeft: boolean = false
   private previewText?: Phaser.GameObjects.Text
+  private windForce: number = 0
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene
+  }
+
+  setWindForce(force: number) {
+    this.windForce = force
   }
 
   startAim(x: number, y: number, facingLeft: boolean) {
@@ -87,8 +92,8 @@ export default class AimSystem {
     this.graphics.clear()
 
     const radians = Phaser.Math.DegToRad(this.angle)
-    let vx = Math.cos(radians) * this.power * 800
-    let vy = Math.sin(radians) * this.power * 800
+    let vx = Math.cos(radians) * this.power * PHYSICS.throwSpeed
+    let vy = Math.sin(radians) * this.power * PHYSICS.throwSpeed
     let px = this.startX
     let py = this.startY
 
@@ -101,7 +106,7 @@ export default class AimSystem {
 
     // Draw trajectory dots
     for (let i = 0; i < 30; i++) {
-      vx += PHYSICS.windForce / 60
+      vx += this.windForce / 60
       vy += PHYSICS.gravity / 60
       px += vx / 60
       py += vy / 60

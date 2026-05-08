@@ -1,6 +1,6 @@
 import { Client, Room } from 'colyseus.js'
-import { PlayerState, GameRoomState, MessageType } from '/home/lap16851/dev/myopencode/game-nem-da/shared/src/types'
-import { GAME_CONFIG } from '/home/lap16851/dev/myopencode/game-nem-da/shared/src/constants'
+import { PlayerState, GameRoomState, MessageType } from '@nem-da/shared/types'
+import { GAME_CONFIG } from '@nem-da/shared/constants'
 
 type MessageHandler = (data: any) => void
 
@@ -48,6 +48,7 @@ export default class NetworkManager {
     this.room.onMessage('taunt', (data) => this.emit('taunt', data))
     this.room.onMessage('emoji', (data) => this.emit('emoji', data))
     this.room.onMessage('windChange', (data) => this.emit('windChange', data))
+    this.room.onMessage('statusEffect', (data) => this.emit('statusEffect', data))
 
     return this.room
   }

@@ -3,7 +3,7 @@ import NetworkManager from '../network/NetworkManager'
 import PlayerEntity from '../entities/PlayerEntity'
 import AimSystem from '../systems/AimSystem'
 import ProjectileSystem from '../systems/ProjectileSystem'
-import { GAME_CONFIG } from '/home/lap16851/dev/myopencode/game-nem-da/shared/src/constants'
+import { GAME_CONFIG } from '@nem-da/shared/constants'
 
 export default class GameScene extends Phaser.Scene {
   private network: NetworkManager
@@ -79,6 +79,9 @@ export default class GameScene extends Phaser.Scene {
     const playerIds = Array.from(state.players.keys())
     this.isMyTurn = playerIds[state.currentTurn] === this.myPlayerId
 
+    // Sync wind with aim system
+    this.aimSystem.setWindForce(state.windForce || 0)
+
     // Sync player positions
     state.players.forEach((player: any, key: string) => {
       let entity = this.players.get(key)
@@ -97,6 +100,7 @@ export default class GameScene extends Phaser.Scene {
         this.projectileSystem.createProjectile(projId, proj)
       }
     })
+    this.projectileSystem.syncProjectiles(state.projectiles)
   }
 
   private createPlayerEntity(key: string, playerData: any): PlayerEntity {
@@ -202,9 +206,40 @@ export default class GameScene extends Phaser.Scene {
 
     this.network.on('hit', (data: any) => {
       this.showDamageText(data.targetId, data.damage, data.isCritical)
-      this.cameras.main.shake(150, 0.003)
+
+      // Camera shake based on damage
+      const intensity = data.projectileType === 'bomb' || data.projectileType === 'bomb_aoe' ? 0.008 : data.isCritical ? 0.005 : 0.003
+      const duration = data.projectileType === 'bomb' || data.projectileType === 'bomb_aoe' ? 400 : data.isCritical ? 200 : 150
+      this.cameras.main.shake(duration, intensity)
+
+      // Critical hit flash
+      if (data.isCritical) {
+        this.showText('⚡ CRITICAL!', 0xffeb3b)
+      }
+
+      // Bomb screen flash
+      if (data.projectileType === 'bomb' || data.projectileType === 'bomb_aoe') {
+        const flash = this.add.rectangle(this.cameras.main.width / 2, this.cameras.main.height / 2,
+          this.cameras.main.width, this.cameras.main.height, 0xffffff, 0.3).setDepth(999)
+        this.tweens.add({ targets: flash, alpha: 0, duration: 200, onComplete: () => flash.destroy() })
+      }
+
       const victim = this.players.get(data.targetId)
-      if (victim) victim.playAnimation('hit')
+      if (victim) {
+        victim.playAnimation('hit')
+
+        // Knockback
+        const dir = victim.flipX ? 1 : -1
+        this.tweens.add({
+          targets: victim.sprite, x: victim.sprite.x + dir * 30, duration: 100,
+          yoyo: true, ease: 'Power2'
+        })
+
+        // Status effect
+        if (data.statusEffect) {
+          victim.showStatusEffect(data.statusEffect)
+        }
+      }
     })
 
     this.network.on('death', (data: any) => {
@@ -215,7 +250,11 @@ export default class GameScene extends Phaser.Scene {
 
     this.network.on('timeout', (data: any) => {
       if (data.playerId === this.myPlayerId) {
-        this.showText('HẾT GIỜ!', 0xff0000)
+        this.showText(data.isStunned ? 'BỊ CHOÁNG! NÉM TỰ ĐỘNG!' : 'HẾT GIỜ!', 0xff0000)
+      }
+      if (data.effect) {
+        const player = this.players.get(data.playerId)
+        if (player) player.showStatusEffect(data.effect)
       }
     })
 
@@ -241,6 +280,21 @@ export default class GameScene extends Phaser.Scene {
     this.network.on('taunt', (data: any) => {
       const player = this.players.get(data.playerId)
       if (player) player.playAnimation('taunt')
+    })
+
+    this.network.on('statusEffect', (data: any) => {
+      const player = this.players.get(data.playerId)
+      if (player) {
+        player.showStatusEffect(data.effect)
+        if (data.playerId === this.myPlayerId) {
+          const msg = data.effect === 'stunned' ? 'Bị choáng! Ném sau 5s...' : data.effect === 'sleeping' ? 'Bị ngủ! Ném sau 5s...' : ''
+          if (msg) this.showText(msg, 0xff6600)
+        }
+      }
+    })
+
+    this.network.on('windChange', (data: any) => {
+      this.aimSystem.setWindForce(data.force)
     })
   }
 

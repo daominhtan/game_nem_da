@@ -9,7 +9,7 @@
     "jsx": "preserve",
     "baseUrl": ".",
     "paths": {
-      "@shared/*": ["/home/lap16851/dev/myopencode/game-nem-da/shared/src/*"]
+      "@nem-da/shared/*": ["../shared/src/*"]
     }
   },
   "include": ["src/**/*"]

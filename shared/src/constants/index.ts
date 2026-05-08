@@ -15,7 +15,8 @@ export const PHYSICS = {
   maxPower: 1.0,
   minAngle: -90,
   maxAngle: 0,
-  groundY: 580
+  groundY: 580,
+  throwSpeed: 1500 // base speed multiplier for throw velocity
 }
 
 export const MSG = {

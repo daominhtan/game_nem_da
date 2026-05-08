@@ -4,7 +4,7 @@ import MenuScene from './scenes/MenuScene'
 import GameScene from './scenes/GameScene'
 import UIScene from './scenes/UIScene'
 import ResultScene from './scenes/ResultScene'
-import { GAME_CONFIG } from '/home/lap16851/dev/myopencode/game-nem-da/shared/src/constants'
+import { GAME_CONFIG } from '@nem-da/shared/constants'
 
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,

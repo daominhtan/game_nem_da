@@ -9,10 +9,5 @@ export default defineConfig({
         ws: true
       }
     }
-  },
-  resolve: {
-    alias: {
-      '@shared': '/home/lap16851/dev/myopencode/game-nem-da/shared/src'
-    }
   }
 })

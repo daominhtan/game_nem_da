@@ -10,7 +10,8 @@
   },
   "dependencies": {
     "phaser": "^4.0.0",
-    "colyseus.js": "^0.15.0"
+    "colyseus.js": "^0.15.0",
+    "@nem-da/shared": "*"
   },
   "devDependencies": {
     "vite": "^5.0.0",

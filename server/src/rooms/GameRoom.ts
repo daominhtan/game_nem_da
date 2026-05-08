@@ -5,6 +5,7 @@ import { GameRoomSchema, PlayerSchema, ProjectileSchema } from './schema.js'
 const GRAVITY = 980
 const GROUND_Y = 580
 const MAX_TURN_TIME = 15 // seconds
+const THROW_SPEED = 1500 // base speed multiplier for throw velocity
 
 export class GameRoom extends Room<GameRoomSchema> {
   maxClients = 2
@@ -104,7 +105,23 @@ export class GameRoom extends Room<GameRoomSchema> {
   }
 
   private startTurn() {
-    this.state.timeLeft = MAX_TURN_TIME
+    const playerIds = Array.from(this.state.players.keys())
+    const currentPlayer = this.state.players.get(playerIds[this.state.currentTurn])
+
+    // Check if current player has a disabling status effect
+    const isStunned = currentPlayer?.statusEffect === "stunned" || currentPlayer?.statusEffect === "sleeping"
+    const turnTime = isStunned ? 5 : MAX_TURN_TIME
+
+    this.state.timeLeft = turnTime
+
+    if (isStunned && currentPlayer) {
+      this.broadcast("statusEffect", {
+        playerId: currentPlayer.id,
+        effect: currentPlayer.statusEffect,
+        duration: turnTime
+      })
+    }
+
     this.turnTimer = setInterval(() => {
       this.state.timeLeft--
       if (this.state.timeLeft <= 0) {
@@ -112,9 +129,8 @@ export class GameRoom extends Room<GameRoomSchema> {
       }
     }, 1000)
 
-    const playerIds = Array.from(this.state.players.keys())
     const currentPlayerId = playerIds[this.state.currentTurn]
-    this.broadcast("turnStart", { playerId: currentPlayerId, timeLeft: MAX_TURN_TIME })
+    this.broadcast("turnStart", { playerId: currentPlayerId, timeLeft: turnTime })
   }
 
   private handleThrow(player: PlayerSchema, data: any) {
@@ -124,8 +140,8 @@ export class GameRoom extends Room<GameRoomSchema> {
     const radians = (angle * Math.PI) / 180
 
     console.log(`[handleThrow] rawAngle=${data.angle}, angle=${angle}, radians=${radians.toFixed(4)}, cos=${Math.cos(radians).toFixed(4)}`)
-    const velocityX = Math.cos(radians) * power * 800
-    const velocityY = Math.sin(radians) * power * 800
+const velocityX = Math.cos(radians) * power * THROW_SPEED
+const velocityY = Math.sin(radians) * power * THROW_SPEED
 
     console.log(`[handleThrow] player=${player.id}, angle=${angle}, power=${power}, velocityX=${velocityX.toFixed(1)}, velocityY=${velocityY.toFixed(1)}`)
 
@@ -181,15 +197,62 @@ export class GameRoom extends Room<GameRoomSchema> {
   }
 
   private handleProjectileHit(projectile: ProjectileSchema, target: PlayerSchema | null) {
+    const isBomb = projectile.type === "bomb"
+
     if (target) {
-      const damage = this.getSkillDamage(projectile.type)
+      let damage = this.getSkillDamage(projectile.type)
+
+      // Critical hit (20% chance)
+      const isCritical = Math.random() < 0.2
+      if (isCritical) damage = Math.floor(damage * 1.5)
+
+      // Apply damage
       target.hp = Math.max(0, target.hp - damage)
+
+      // Apply status effects
+      if (projectile.type === "soap") {
+        target.statusEffect = "stunned"
+        target.statusDuration = 2
+      } else if (projectile.type === "pillow") {
+        target.statusEffect = "sleeping"
+        target.statusDuration = 2
+      } else if (projectile.type === "honey") {
+        target.statusEffect = "slowed"
+        target.statusDuration = 3
+      }
+
+      // Bomb AoE: damage nearby players too
+      if (isBomb) {
+        this.state.players.forEach((player, playerId) => {
+          if (playerId !== target.id && player.isAlive) {
+            const dist = Math.sqrt(
+              Math.pow(projectile.x - player.x, 2) + Math.pow(projectile.y - player.y, 2)
+            )
+            if (dist < 80) {
+              const aoeDamage = Math.floor(50 * (1 - dist / 80))
+              player.hp = Math.max(0, player.hp - aoeDamage)
+              this.broadcast("hit", {
+                targetId: player.id,
+                damage: aoeDamage,
+                isCritical: false,
+                projectileType: "bomb_aoe"
+              })
+              if (player.hp <= 0) {
+                player.isAlive = false
+                player.animState = "die"
+                this.broadcast("death", { targetId: player.id, killerId: projectile.ownerId })
+              }
+            }
+          }
+        })
+      }
 
       this.broadcast("hit", {
         targetId: target.id,
         damage,
-        isCritical: false,
-        projectileType: projectile.type
+        isCritical,
+        projectileType: projectile.type,
+        statusEffect: target.statusEffect || undefined
       })
 
       if (target.hp <= 0) {
@@ -200,7 +263,7 @@ export class GameRoom extends Room<GameRoomSchema> {
     }
 
     // Next turn after hit
-    setTimeout(() => this.nextTurn(), 1000)
+    setTimeout(() => this.nextTurn(), isBomb ? 1500 : 1000)
   }
 
   private handleTimeout() {
@@ -210,14 +273,38 @@ export class GameRoom extends Room<GameRoomSchema> {
     const currentPlayer = this.state.players.get(playerIds[this.state.currentTurn])
 
     if (currentPlayer) {
-      const defaultAngle = currentPlayer.facingLeft ? -135 : -45
-      this.broadcast("timeout", { playerId: currentPlayer.id })
+      // If stunned, throw erratically
+      const isStunned = currentPlayer.statusEffect === "stunned" || currentPlayer.statusEffect === "sleeping"
+      const defaultAngle = isStunned
+        ? (Math.random() * 180) - 180  // random bad throw
+        : currentPlayer.facingLeft ? -135 : -45
+
+      this.broadcast("timeout", {
+        playerId: currentPlayer.id,
+        isStunned: isStunned,
+        effect: currentPlayer.statusEffect
+      })
+
+      // Clear the status effect after timeout throw
+      currentPlayer.statusEffect = ""
+      currentPlayer.statusDuration = 0
+
       this.handleThrow(currentPlayer, { angle: defaultAngle, power: 0.5, skillId: "rock" })
     }
   }
 
   private nextTurn() {
     if (this.turnTimer) clearInterval(this.turnTimer)
+
+    // Decrement status durations
+    this.state.players.forEach(player => {
+      if (player.statusDuration > 0) {
+        player.statusDuration--
+        if (player.statusDuration <= 0) {
+          player.statusEffect = ""
+        }
+      }
+    })
 
     this.state.turnNumber++
 
@@ -231,6 +318,7 @@ export class GameRoom extends Room<GameRoomSchema> {
     // Switch turn
     this.state.currentTurn = (this.state.currentTurn + 1) % 2
     this.state.windForce = this.randomWind()
+    this.broadcast("windChange", { force: this.state.windForce })
     this.startTurn()
   }
 
