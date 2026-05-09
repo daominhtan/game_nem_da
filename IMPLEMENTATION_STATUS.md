@@ -93,6 +93,12 @@
 - Local player keeps gravity for natural landing on ground level
 - Fixes root cause: interpolation was overriding collider position each frame, pushing enemy through ground
 
+### 16. Procedural Sound Effects & BGM
+- `SoundManager` singleton using Web Audio API — no external audio files needed
+- 14 procedural sound effects: throw (whoosh), hit (thump), critical (metallic ping), combo (ascending chimes), death (descending sawtooth), emoji (pop), taunt (ascending square wave beeps), turn start (bell), timeout (alarm), explosion (rumble+noise), click (UI), jump (rising tone), win (ascending notes), lose (descending notes)
+- BGM: looping triangle-wave melody with bass drone
+- Sounds integrated into GameScene events, ProjectileSystem ground impacts
+
 ## 🚧 Partially Implemented
 
 ### Animations
@@ -157,10 +163,9 @@ nem-da-game/
 
 ## 🏃 Next Steps
 
-1. Add sound effects and BGM
-2. Implement status effects (stun, sleep, slide)
-3. Parallax backgrounds
-4. Platform tilemaps (currently flat ground only)
-5. 3 Maps (only Forest Island placeholder)
-6. Add real sprite assets (replace placeholders)
-7. Easter eggs, win/lose quotes, confetti, random funny names
+1. Implement status effects (stun, sleep, slide)
+2. Parallax backgrounds
+3. Platform tilemaps (currently flat ground only)
+4. 3 Maps (only Forest Island placeholder)
+5. Add real sprite assets (replace placeholders)
+6. Easter eggs, win/lose quotes, confetti, random funny names

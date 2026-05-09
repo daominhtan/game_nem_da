@@ -3,6 +3,7 @@ import NetworkManager from '../network/NetworkManager';
 import PlayerEntity from '../entities/PlayerEntity';
 import AimSystem from '../systems/AimSystem';
 import ProjectileSystem from '../systems/ProjectileSystem';
+import { SoundManager } from '../systems/SoundManager';
 import { GAME_CONFIG, SKILL_DATA } from '@nem-da/shared/constants';
 import { getCharacterById } from '../config/characters';
 export default class GameScene extends Phaser.Scene {
@@ -19,6 +20,7 @@ export default class GameScene extends Phaser.Scene {
         this.players = new Map();
         this.aimSystem = new AimSystem(this);
         this.projectileSystem = new ProjectileSystem(this);
+        this.sfx = SoundManager.getInstance();
     }
     create() {
         const { width, height } = this.cameras.main;
@@ -54,6 +56,10 @@ export default class GameScene extends Phaser.Scene {
         // Create skill bar after scene is ready
         this.time.delayedCall(300, () => {
             this.createSkillBar();
+        });
+        // Start BGM
+        this.time.delayedCall(500, () => {
+            this.sfx.startBGM();
         });
     }
     createSkillBar() {
@@ -118,6 +124,7 @@ export default class GameScene extends Phaser.Scene {
             bg.on('pointerdown', () => {
                 this.selectedSkill = skillId;
                 this.highlightSkill();
+                this.sfx.playClick();
             });
             this.skillBarRects.push(bg);
         });
@@ -212,6 +219,7 @@ export default class GameScene extends Phaser.Scene {
                     return;
                 this.selectedSkill = char.skills[index];
                 this.highlightSkill();
+                this.sfx.playClick();
             });
         });
         // Mouse aiming
@@ -261,6 +269,7 @@ export default class GameScene extends Phaser.Scene {
             this.isMyTurn = data.playerId === this.myPlayerId;
             if (this.isMyTurn) {
                 this.showTurnIndicator('LƯỢT CỦA BẠN!');
+                this.sfx.playTurnStart();
             }
         });
         this.network.on('throw', (data) => {
@@ -271,18 +280,29 @@ export default class GameScene extends Phaser.Scene {
             if (proj && !this.projectileSystem.hasProjectile(data.projectileId)) {
                 this.projectileSystem.createProjectile(data.projectileId, proj);
             }
+            this.sfx.playThrow();
         });
         this.network.on('hit', (data) => {
             this.showDamageText(data.targetId, data.damage, data.isCritical);
-            const intensity = data.projectileType === 'bomb' || data.projectileType === 'bomb_aoe' ? 0.008 : data.isCritical ? 0.005 : 0.003;
-            const duration = data.projectileType === 'bomb' || data.projectileType === 'bomb_aoe' ? 400 : data.isCritical ? 200 : 150;
+            const isBomb = data.projectileType === 'bomb' || data.projectileType === 'bomb_aoe';
+            if (isBomb) {
+                this.sfx.playExplosion();
+            }
+            else if (data.isCritical) {
+                this.sfx.playCritical();
+            }
+            else {
+                this.sfx.playHit();
+            }
+            const intensity = isBomb ? 0.008 : data.isCritical ? 0.005 : 0.003;
+            const duration = isBomb ? 400 : data.isCritical ? 200 : 150;
             this.cameras.main.shake(duration, intensity);
             if (data.isCritical) {
                 this.showText('\u{26A1} CRITICAL!', 0xffeb3b);
                 this.time.timeScale = 0.3;
                 this.time.delayedCall(300, () => { this.time.timeScale = 1.0; });
             }
-            if (data.projectileType === 'bomb' || data.projectileType === 'bomb_aoe') {
+            if (isBomb) {
                 const flash = this.add.rectangle(this.cameras.main.width / 2, this.cameras.main.height / 2, this.cameras.main.width, this.cameras.main.height, 0xffffff, 0.3).setDepth(999);
                 this.tweens.add({ targets: flash, alpha: 0, duration: 200, onComplete: () => flash.destroy() });
             }
@@ -300,6 +320,7 @@ export default class GameScene extends Phaser.Scene {
             }
         });
         this.network.on('combo', (data) => {
+            this.sfx.playCombo(data.level || 2);
             if (data.level >= 3) {
                 this.showText(`\u{1F525} COMBO x${data.level}!`, 0xff6600);
             }
@@ -309,11 +330,13 @@ export default class GameScene extends Phaser.Scene {
         });
         this.network.on('death', (data) => {
             this.cameras.main.shake(200, 0.005);
+            this.sfx.playDeath();
             const victim = this.players.get(data.targetId);
             if (victim)
                 victim.playAnimation('die');
         });
         this.network.on('timeout', (data) => {
+            this.sfx.playTimeout();
             if (data.playerId === this.myPlayerId) {
                 this.showText(data.isStunned ? 'BỊ CHOÁNG! NÉM TỰ ĐỘNG!' : 'HẾT GIỜ!', 0xff0000);
             }
@@ -336,11 +359,13 @@ export default class GameScene extends Phaser.Scene {
             });
         });
         this.network.on('emoji', (data) => {
+            this.sfx.playEmoji();
             const player = this.players.get(data.playerId);
             if (player)
                 player.showEmoji(data.emoji);
         });
         this.network.on('taunt', (data) => {
+            this.sfx.playTaunt();
             const player = this.players.get(data.playerId);
             if (player)
                 player.playAnimation('taunt');

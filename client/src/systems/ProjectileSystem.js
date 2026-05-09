@@ -1,4 +1,5 @@
 import { GAME_CONFIG } from '@nem-da/shared/constants';
+import { SoundManager } from './SoundManager';
 export default class ProjectileSystem {
     constructor(scene) {
         this.scene = scene;
@@ -74,7 +75,9 @@ export default class ProjectileSystem {
         this.particles.set(proj.getData('projectileId'), particles);
     }
     spawnExplosion(x, y, type) {
+        const sfx = SoundManager.getInstance();
         if (type === 'bomb') {
+            sfx.playExplosion();
             const flash = this.scene.add.circle(x, y, 10, 0xffffff, 1).setDepth(200);
             this.scene.tweens.add({
                 targets: flash, scaleX: 5, scaleY: 5, alpha: 0, duration: 300,
@@ -102,6 +105,7 @@ export default class ProjectileSystem {
             this.scene.time.delayedCall(1000, () => smoke.destroy());
         }
         else {
+            sfx.playHit();
             const dust = this.scene.add.particles(x, y, 'fx_dust', {
                 speed: { min: 50, max: 150 },
                 angle: { min: 0, max: 360 },

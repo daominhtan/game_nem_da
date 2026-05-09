@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { SoundManager } from '../systems/SoundManager';
 export default class BootScene extends Phaser.Scene {
     constructor() {
         super('BootScene');
@@ -10,6 +11,8 @@ export default class BootScene extends Phaser.Scene {
         this.createFxTextures();
         this.createBackgroundTextures();
         this.createGroundTexture();
+        // Init sound manager (context starts suspended until user gesture)
+        SoundManager.getInstance();
         this.time.delayedCall(100, () => {
             this.scene.start('MenuScene');
         });
