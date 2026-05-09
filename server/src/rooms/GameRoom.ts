@@ -203,6 +203,22 @@ const velocityY = Math.sin(radians) * power * THROW_SPEED
     let comboLevel = 0
 
     if (target) {
+      // Wind shield blocks incoming projectile entirely
+      if (target.statusEffect === "wind_shield") {
+        target.statusEffect = ""
+        target.statusDuration = 0
+        this.broadcast("hit", {
+          targetId: target.id,
+          damage: 0,
+          isCritical: false,
+          projectileType: projectile.type,
+          statusEffect: "shield_break",
+          comboLevel: 0
+        })
+        setTimeout(() => this.nextTurn(), 1000)
+        return
+      }
+
       let damage = this.getSkillDamage(projectile.type)
 
       // Critical hit (20% chance)
@@ -229,7 +245,7 @@ const velocityY = Math.sin(radians) * power * THROW_SPEED
       damage = Math.floor(damage * comboMultiplier)
 
       // Apply damage
-        target.hp = Math.max(0, target.hp - damage)
+      target.hp = Math.max(0, target.hp - damage)
 
       // Broadcast combo
       if (comboLevel > 1) {
@@ -240,16 +256,28 @@ const velocityY = Math.sin(radians) * power * THROW_SPEED
         })
       }
 
-      // Apply status effects
-      if (projectile.type === "soap") {
-        target.statusEffect = "stunned"
-        target.statusDuration = 2
-      } else if (projectile.type === "pillow") {
-        target.statusEffect = "sleeping"
-        target.statusDuration = 2
-      } else if (projectile.type === "honey") {
-        target.statusEffect = "slowed"
-        target.statusDuration = 3
+      // Wake sleeping player on hit
+      const wasSleeping = target.statusEffect === "sleeping"
+      if (wasSleeping) {
+        target.statusEffect = ""
+        target.statusDuration = 0
+      }
+
+      // Apply status effects from projectile (unless target was sleeping and is now awake)
+      if (!wasSleeping) {
+        if (projectile.type === "soap") {
+          target.statusEffect = "stunned"
+          target.statusDuration = 2
+        } else if (projectile.type === "pillow") {
+          target.statusEffect = "sleeping"
+          target.statusDuration = 2
+        } else if (projectile.type === "honey") {
+          target.statusEffect = "slowed"
+          target.statusDuration = 3
+        } else if (projectile.type === "wind_blade") {
+          target.statusEffect = "wind_shield"
+          target.statusDuration = 2
+        }
       }
 
       // Bomb AoE: damage nearby players too

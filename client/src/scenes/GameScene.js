@@ -156,6 +156,7 @@ export default class GameScene extends Phaser.Scene {
                 entity.updatePositionFromServer(player.x, player.y, player.animState, player.facingLeft);
             }
             entity.updateHPFromServer(player.hp, player.maxHp, player.isAlive);
+            entity.updateStatusFromServer(player.statusEffect || '', player.statusDuration || 0);
         });
         state.projectiles.forEach((proj, projId) => {
             if (!this.projectileSystem.hasProjectile(projId)) {
@@ -316,6 +317,7 @@ export default class GameScene extends Phaser.Scene {
                 });
                 if (data.statusEffect) {
                     victim.showStatusEffect(data.statusEffect);
+                    victim.updateStatusFromServer(data.statusEffect, 0);
                 }
             }
         });
@@ -374,6 +376,7 @@ export default class GameScene extends Phaser.Scene {
             const player = this.players.get(data.playerId);
             if (player) {
                 player.showStatusEffect(data.effect);
+                player.updateStatusFromServer(data.effect, data.duration || 5);
                 if (data.playerId === this.myPlayerId) {
                     const msg = data.effect === 'stunned' ? 'Bị choáng! Ném sau 5s...' : data.effect === 'sleeping' ? 'Bị ngủ! Ném sau 5s...' : '';
                     if (msg)
@@ -428,7 +431,17 @@ export default class GameScene extends Phaser.Scene {
         const body = myPlayer.getBody();
         if (!body)
             return;
-        const speed = 180;
+        // Check status effects
+        const status = myPlayer.getStatusEffect();
+        const isStunned = status === 'stunned' || status === 'sleeping';
+        // Stunned/sleeping players can't move
+        if (isStunned) {
+            body.setVelocityX(0);
+            this.network.sendMove(myPlayer.x, myPlayer.y, 0, body.velocity.y, myPlayer.flipX, 'idle');
+            return;
+        }
+        const baseSpeed = 180;
+        const speed = status === 'slowed' ? baseSpeed * 0.5 : baseSpeed;
         let vx = 0;
         if (this.moveState.left)
             vx = -speed;

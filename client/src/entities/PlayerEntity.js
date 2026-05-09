@@ -2,6 +2,7 @@ export default class PlayerEntity {
     constructor(scene, state, isLocal = false) {
         this.breathTime = 0;
         this.wasOnFloor = true;
+        this.statusEffect = '';
         this.playerState = state;
         this.targetX = state.x;
         this.targetY = state.y;
@@ -31,6 +32,10 @@ export default class PlayerEntity {
         this.sprite.y += (this.targetY - this.sprite.y) * 0.15;
         this.targetX = this.playerState.x;
         this.targetY = this.playerState.y;
+        // Update status text position
+        if (this.statusText) {
+            this.statusText.setPosition(this.sprite.x, this.sprite.y - 100);
+        }
         // Idle breathing animation (subtle scale oscillation)
         this.breathTime += delta * 0.003;
         if (this.playerState.animState === 'idle' || !this.playerState.animState) {
@@ -47,8 +52,9 @@ export default class PlayerEntity {
         }
         this.updateHPBar();
         this.debugRect.setPosition(this.sprite.x, this.sprite.y);
-        if (this.statusText) {
-            this.statusText.setPosition(this.sprite.x, this.sprite.y - 100);
+        // Stun animation: rapid small shake
+        if (this.statusEffect === 'stunned') {
+            this.sprite.x += Math.sin(time * 0.05) * 1.5;
         }
     }
     playLandingSquash() {
@@ -84,6 +90,83 @@ export default class PlayerEntity {
                 onUpdate: () => this.updateHPBar()
             });
         }
+    }
+    updateStatusFromServer(effect, duration) {
+        this.statusEffect = effect;
+        this.sprite.clearTint();
+        // Remove old status particles
+        if (this.statusParticles) {
+            this.statusParticles.destroy();
+            this.statusParticles = undefined;
+        }
+        if (this.shieldGraphic) {
+            this.shieldGraphic.destroy();
+            this.shieldGraphic = undefined;
+        }
+        if (this.statusTimer) {
+            this.statusTimer.destroy();
+            this.statusTimer = undefined;
+        }
+        if (!effect)
+            return;
+        const scene = this.sprite.scene;
+        switch (effect) {
+            case 'stunned':
+                this.sprite.setTint(0xffff44);
+                break;
+            case 'sleeping':
+                this.sprite.setTint(0xcc88ff);
+                break;
+            case 'slowed':
+                this.sprite.setTint(0x88ccff);
+                break;
+            case 'wind_shield':
+                this.drawShield();
+                break;
+            case 'shield_break':
+                this.flashShieldBreak();
+                return;
+        }
+        // Auto-clear after duration
+        if (duration > 0) {
+            this.statusTimer = scene.time.delayedCall(duration * 1000, () => {
+                this.updateStatusFromServer('', 0);
+            });
+        }
+    }
+    drawShield() {
+        const scene = this.sprite.scene;
+        this.shieldGraphic = scene.add.graphics();
+        this.shieldGraphic.setDepth(55);
+        const draw = () => {
+            if (!this.shieldGraphic || !this.shieldGraphic.active)
+                return;
+            this.shieldGraphic.clear();
+            this.shieldGraphic.setPosition(this.sprite.x, this.sprite.y);
+            this.shieldGraphic.lineStyle(3, 0x44ff44, 0.7);
+            this.shieldGraphic.strokeCircle(0, 0, 40);
+            this.shieldGraphic.lineStyle(2, 0x88ff88, 0.3);
+            this.shieldGraphic.strokeCircle(0, 0, 44);
+        };
+        draw();
+        scene.time.addEvent({ delay: 100, callback: draw, loop: true });
+    }
+    flashShieldBreak() {
+        const scene = this.sprite.scene;
+        const flash = scene.add.graphics();
+        flash.setDepth(55);
+        flash.setPosition(this.sprite.x, this.sprite.y);
+        flash.lineStyle(4, 0xff4444, 0.9);
+        flash.strokeCircle(0, 0, 44);
+        flash.fillStyle(0x44ff44, 0.3);
+        flash.fillCircle(0, 0, 44);
+        scene.tweens.add({
+            targets: flash, alpha: 0, scaleX: 1.5, scaleY: 1.5, duration: 300,
+            onComplete: () => flash.destroy()
+        });
+    }
+    getStatusEffect() {
+        return this.statusEffect;
     }
     showStatusEffect(effect) {
         if (this.statusText) {
