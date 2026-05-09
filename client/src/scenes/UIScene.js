@@ -1,12 +1,31 @@
 import Phaser from 'phaser';
 import NetworkManager from '../network/NetworkManager';
+import { SKILL_DATA } from '@nem-da/shared/constants';
+import { getCharacterById } from '../config/characters';
+const SKILL_COLORS = {
+    rock: 0x9e9e9e,
+    big_rock: 0x757575,
+    bomb: 0xd32f2f,
+    soap: 0x42a5f5,
+    pillow: 0xfff176,
+    fireball: 0xff5722,
+    wind_blade: 0x80deea,
+    shuriken: 0x78909c,
+    hug_rush: 0x8d6e63,
+    honey: 0xffc107,
+    rock_rain: 0x9e9e9e,
+    triple_rock: 0x9e9e9e
+};
 export default class UIScene extends Phaser.Scene {
     constructor() {
         super('UIScene');
+        this.skillIcons = [];
+        this.selectedSkill = 'rock';
+        this.barCreated = false;
         this.network = NetworkManager.getInstance();
     }
     create() {
-        const { width } = this.cameras.main;
+        const { width, height } = this.cameras.main;
         this.roundCircles = this.add.graphics().setDepth(1000);
         this.timerText = this.add.text(width / 2, 20, '15', {
             fontSize: '48px', color: '#00ff00', stroke: '#000', strokeThickness: 4
@@ -22,6 +41,172 @@ export default class UIScene extends Phaser.Scene {
         this.add.text(width - 20, 20, 'Player 2', {
             fontSize: '18px', color: '#F44336'
         }).setOrigin(1, 0).setDepth(1000);
+        // Skill bar title - shown above skill icons
+        this.titleLabel = this.add.text(width / 2, height - 110, 'CHON DAN (phim 1-4):', {
+            fontSize: '18px', color: '#ffeb3b',
+            stroke: '#000', strokeThickness: 4
+        }).setOrigin(0.5).setDepth(1000).setAlpha(0);
+        // Defender label
+        this.defenderLabel = this.add.text(width / 2, height - 20, '', {
+            fontSize: '16px', color: '#ffcc00',
+            stroke: '#000', strokeThickness: 3
+        }).setOrigin(0.5).setDepth(1000).setAlpha(0);
+        // DEBUG: verify UIScene renders
+        this.add.text(width / 2, height / 2, 'UIScene OK', {
+            fontSize: '24px', color: '#00ff00', backgroundColor: '#000',
+            stroke: '#000', strokeThickness: 2
+        }).setOrigin(0.5).setDepth(9999);
+        // Listen for skill select events from GameScene (keyboard 1-4)
+        this.game.events.on('selectSkill', (skillId) => {
+            this.setSelectedSkill(skillId);
+        });
+    }
+    initSkillBar() {
+        this.clearSkillBar();
+        this.barCreated = false;
+        const room = this.network.getRoom();
+        if (!room) {
+            console.error('[UIScene] No room');
+            this.addDebugText('ERROR: No room');
+            return;
+        }
+        const myPlayerId = room.sessionId;
+        if (!myPlayerId) {
+            console.error('[UIScene] No sessionId');
+            this.addDebugText('ERROR: No sessionId');
+            return;
+        }
+        const myPlayerData = room.state.players.get(myPlayerId);
+        if (!myPlayerData) {
+            console.error('[UIScene] No player data - available players:', Array.from(room.state.players.keys()));
+            this.addDebugText(`ERROR: No data for ${myPlayerId}`);
+            return;
+        }
+        const charId = myPlayerData.characterId || 'warrior';
+        console.log(`[UIScene] initSkillBar: charId=${charId}`);
+        this.addDebugText(`Creating bar for ${charId}`);
+        const char = getCharacterById(charId);
+        if (!char) {
+            console.error('[UIScene] Unknown char:', charId);
+            this.addDebugText(`ERROR: Unknown char ${charId}`);
+            return;
+        }
+        const skills = char.skills;
+        const { width, height } = this.cameras.main;
+        const barY = height - 85;
+        const iconSize = 52;
+        const spacing = 60;
+        // Position: center the bar
+        const totalWidth = skills.length * spacing;
+        const startX = (width - totalWidth) / 2 + iconSize / 2;
+        this.selectedSkill = skills[0] || 'rock';
+        // Show title
+        if (this.titleLabel)
+            this.titleLabel.setAlpha(1);
+        console.log(`[UIScene] Creating skill bar for ${charId}:`, skills);
+        skills.forEach((skillId, index) => {
+            const x = startX + index * spacing;
+            const skillData = SKILL_DATA[skillId];
+            if (!skillData)
+                return;
+            const color = SKILL_COLORS[skillId] || 0x666666;
+            // Skill icon background
+            const bg = this.add.rectangle(x, barY, iconSize, iconSize, color, 0.9)
+                .setStrokeStyle(2, 0xffffff)
+                .setInteractive({ useHandCursor: true })
+                .setDepth(1000);
+            // Skill name
+            const nameLabel = this.add.text(x, barY - 8, this.getShortName(skillData.name), {
+                fontSize: '12px', color: '#fff', fontStyle: 'bold',
+                stroke: '#000', strokeThickness: 3
+            }).setOrigin(0.5).setDepth(1001);
+            // Damage label
+            const dmgText = skillData.damage > 0 ? `${skillData.damage} DMG` : 'DEBUFF';
+            this.add.text(x, barY + 10, dmgText, {
+                fontSize: '9px', color: '#ffccbc',
+                stroke: '#000', strokeThickness: 2
+            }).setOrigin(0.5).setDepth(1001);
+            // Key label
+            const keyLabel = this.add.text(x, barY + iconSize / 2 - 12, `[${index + 1}]`, {
+                fontSize: '11px', color: '#ffeb3b',
+                stroke: '#000', strokeThickness: 3
+            }).setOrigin(0.5).setDepth(1001);
+            // Cooldown overlay
+            const cooldownOverlay = this.add.graphics().setDepth(1002);
+            const cooldownText = this.add.text(x, barY, '', {
+                fontSize: '16px', color: '#fff', fontStyle: 'bold',
+                stroke: '#000', strokeThickness: 3
+            }).setOrigin(0.5).setDepth(1003);
+            bg.on('pointerdown', () => {
+                this.setSelectedSkill(skillId);
+                this.game.events.emit('skillSelected', skillId);
+            });
+            this.skillIcons.push({
+                id: skillId, bg, keyLabel, nameLabel,
+                cooldownOverlay, cooldownText, cooldownEnd: 0
+            });
+        });
+        this.highlightSelected();
+        this.barCreated = true;
+        console.log(`[UIScene] Skill bar created with ${skills.length} skills`);
+        this.addDebugText(`Bar created: ${skills.join(', ')}`);
+    }
+    getShortName(name) {
+        if (name.length <= 8)
+            return name;
+        return name.substring(0, 7) + '..';
+    }
+    addDebugText(msg) {
+        const { width, height } = this.cameras.main;
+        this.add.text(width / 2, height / 2 + 40, msg, {
+            fontSize: '20px', color: '#ffff00', backgroundColor: '#000',
+            stroke: '#000', strokeThickness: 2
+        }).setOrigin(0.5).setDepth(9999);
+    }
+    clearSkillBar() {
+        this.skillIcons.forEach(s => {
+            s.bg.destroy();
+            s.keyLabel.destroy();
+            s.nameLabel.destroy();
+            s.cooldownOverlay.destroy();
+            s.cooldownText.destroy();
+        });
+        this.skillIcons = [];
+    }
+    setSelectedSkill(skillId) {
+        const exists = this.skillIcons.find(s => s.id === skillId);
+        if (!exists)
+            return;
+        this.selectedSkill = skillId;
+        this.highlightSelected();
+    }
+    highlightSelected() {
+        this.skillIcons.forEach(s => {
+            const isSelected = s.id === this.selectedSkill;
+            s.bg.setStrokeStyle(isSelected ? 3 : 1, isSelected ? 0x00ff00 : 0xffffff);
+            if (isSelected) {
+                s.bg.setAlpha(1);
+            }
+        });
+    }
+    selectSkillByIndex(index) {
+        if (index >= 0 && index < this.skillIcons.length) {
+            const skill = this.skillIcons[index];
+            this.setSelectedSkill(skill.id);
+            this.game.events.emit('skillSelected', skill.id);
+        }
+    }
+    startCooldown(skillId) {
+        const skill = this.skillIcons.find(s => s.id === skillId);
+        if (!skill)
+            return;
+        const cd = SKILL_DATA[skillId]?.cooldown || 0;
+        if (cd <= 0)
+            return;
+        skill.cooldownEnd = Date.now() + cd * 1000;
+    }
+    getSelectedSkill() {
+        return this.selectedSkill;
     }
     update() {
         const room = this.network.getRoom();
@@ -51,8 +236,46 @@ export default class UIScene extends Phaser.Scene {
             const windDir = windForce > 0 ? '→' : windForce < 0 ? '←' : '';
             this.windIndicator.setText(`Gió: ${Math.abs(windForce)} ${windDir}`);
         }
+        // Defender label
+        if (this.defenderLabel) {
+            const playerIds = Array.from(state.players.keys());
+            const isMyTurn = playerIds[state.currentTurn] === room.sessionId;
+            if (state.phase === 'playing' && !isMyTurn) {
+                this.defenderLabel.setText('\u{1F6E1} Lượt đối thủ — Di chuyển né tránh!').setAlpha(1);
+            }
+            else {
+                this.defenderLabel.setAlpha(0);
+            }
+        }
+        this.updateSkillCooldowns();
         this.updateHPBars();
         this.updateRoundIndicators(state);
+    }
+    updateSkillCooldowns() {
+        const now = Date.now();
+        this.skillIcons.forEach(s => {
+            const cd = SKILL_DATA[s.id]?.cooldown || 0;
+            if (cd <= 0)
+                return;
+            const remaining = Math.max(0, s.cooldownEnd - now);
+            s.cooldownOverlay.clear();
+            if (remaining > 0) {
+                const r = 27;
+                const progress = remaining / (cd * 1000);
+                s.cooldownOverlay.fillStyle(0x000000, 0.55);
+                s.cooldownOverlay.beginPath();
+                s.cooldownOverlay.moveTo(s.bg.x, s.bg.y);
+                s.cooldownOverlay.arc(s.bg.x, s.bg.y, r, Phaser.Math.DegToRad(-90), Phaser.Math.DegToRad(-90 + 360 * (1 - progress)), false);
+                s.cooldownOverlay.closePath();
+                s.cooldownOverlay.fillPath();
+                s.cooldownText.setText(`${Math.ceil(remaining / 1000)}s`);
+                s.bg.setAlpha(0.4);
+            }
+            else {
+                s.cooldownText.setText('');
+                s.bg.setAlpha(1);
+            }
+        });
     }
     updateRoundIndicators(state) {
         if (!this.roundCircles)

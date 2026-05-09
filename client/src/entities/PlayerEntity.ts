@@ -11,8 +11,11 @@ export default class PlayerEntity {
   private debugRect: Phaser.GameObjects.Rectangle
   private yellowTargetPercent: number
   private statusText?: Phaser.GameObjects.Text
+  private idleTween?: Phaser.Tweens.Tween
+  private breathTime: number = 0
+  private wasOnFloor: boolean = true
 
-  constructor(scene: Phaser.Scene, state: PlayerState) {
+  constructor(scene: Phaser.Scene, state: PlayerState, isLocal: boolean = false) {
     this.playerState = state
     this.targetX = state.x
     this.targetY = state.y
@@ -27,6 +30,11 @@ export default class PlayerEntity {
     body.setOffset(14, 8)
     body.setCollideWorldBounds(true)
     body.setBounce(0.2)
+
+    // Only local player needs gravity - enemy positions are interpolated from server
+    if (!isLocal) {
+      body.setAllowGravity(false)
+    }
 
     this.hpBarGreen = scene.add.graphics().setDepth(100)
     this.hpBarYellow = scene.add.graphics().setDepth(99)
@@ -47,12 +55,38 @@ export default class PlayerEntity {
     this.targetX = this.playerState.x
     this.targetY = this.playerState.y
 
+    // Idle breathing animation (subtle scale oscillation)
+    this.breathTime += delta * 0.003
+    if (this.playerState.animState === 'idle' || !this.playerState.animState) {
+      const breathe = 1 + Math.sin(this.breathTime) * 0.015
+      this.sprite.setScale(2 * breathe, 2 / breathe)
+    }
+
+    // Landing squash detection
+    const body = this.sprite.body as Phaser.Physics.Arcade.Body
+    if (body) {
+      if (body.onFloor() && !this.wasOnFloor) {
+        this.playLandingSquash()
+      }
+      this.wasOnFloor = body.onFloor()
+    }
+
     this.updateHPBar()
     this.debugRect.setPosition(this.sprite.x, this.sprite.y)
 
     if (this.statusText) {
       this.statusText.setPosition(this.sprite.x, this.sprite.y - 100)
     }
+  }
+
+  private playLandingSquash() {
+    this.sprite.scene.tweens.add({
+      targets: this.sprite,
+      scaleX: 2.6, scaleY: 1.4,
+      duration: 80,
+      yoyo: true,
+      ease: 'Power2'
+    })
   }
 
   updatePositionFromServer(x: number, y: number, _animState: string, facingLeft: boolean) {
@@ -110,21 +144,72 @@ export default class PlayerEntity {
     const scene = this.sprite.scene
 
     if (animName === 'hit') {
-      scene.tweens.add({ targets: this.sprite, alpha: 0.5, duration: 50, yoyo: true, repeat: 2 })
-      scene.tweens.add({ targets: this.sprite, scaleX: 1.4, scaleY: 0.7, duration: 80, yoyo: true, ease: 'Power2' })
-    } else if (animName === 'die') {
+      // Squash on hit: stretch horizontally, squish vertically
+      scene.tweens.add({ targets: this.sprite, alpha: 0.4, duration: 40, yoyo: true, repeat: 2 })
       scene.tweens.add({
-        targets: this.sprite, alpha: 0, y: this.sprite.y + 100, duration: 1000, ease: 'Power2'
+        targets: this.sprite,
+        scaleX: 2.8, scaleY: 1.2,
+        duration: 80,
+        yoyo: true,
+        ease: 'Back.easeOut'
+      })
+    } else if (animName === 'die') {
+      // Dramatic death: squish then sink
+      scene.tweens.add({
+        targets: this.sprite,
+        scaleX: 3, scaleY: 0.5,
+        duration: 300,
+        ease: 'Power2',
+        onComplete: () => {
+          scene.tweens.add({
+            targets: this.sprite, alpha: 0, y: this.sprite.y + 100, duration: 700, ease: 'Power2'
+          })
+        }
       })
     } else if (animName === 'throw') {
+      // Windup squash → release stretch
       scene.tweens.add({
-        targets: this.sprite, scaleX: 1.2, scaleY: 0.9, duration: 80,
-        yoyo: true, ease: 'Power2'
+        targets: this.sprite,
+        scaleX: 2.4, scaleY: 1.6,
+        duration: 60,
+        ease: 'Power1',
+        onComplete: () => {
+          scene.tweens.add({
+            targets: this.sprite,
+            scaleX: 1.8, scaleY: 2.2,
+            duration: 100,
+            ease: 'Power2',
+            onComplete: () => {
+              scene.tweens.add({
+                targets: this.sprite,
+                scaleX: 2, scaleY: 2,
+                duration: 150,
+                ease: 'Bounce.easeOut'
+              })
+            }
+          })
+        }
       })
     } else if (animName === 'taunt') {
+      // Bouncy taunt
       scene.tweens.add({
-        targets: this.sprite, y: this.sprite.y - 20, duration: 200,
-        yoyo: true, repeat: 2, ease: 'Bounce'
+        targets: this.sprite, y: this.sprite.y - 25, duration: 150,
+        yoyo: true, repeat: 3, ease: 'Bounce'
+      })
+      scene.tweens.add({
+        targets: this.sprite,
+        scaleX: 2.2, scaleY: 1.8,
+        duration: 100, yoyo: true, repeat: 3,
+        ease: 'Sine.easeInOut'
+      })
+    } else if (animName === 'jump') {
+      // Squish before jump
+      scene.tweens.add({
+        targets: this.sprite,
+        scaleX: 1.6, scaleY: 2.4,
+        duration: 60,
+        yoyo: true,
+        ease: 'Power2'
       })
     } else {
       scene.tweens.add({

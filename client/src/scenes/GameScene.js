@@ -3,7 +3,8 @@ import NetworkManager from '../network/NetworkManager';
 import PlayerEntity from '../entities/PlayerEntity';
 import AimSystem from '../systems/AimSystem';
 import ProjectileSystem from '../systems/ProjectileSystem';
-import { GAME_CONFIG } from '@nem-da/shared/constants';
+import { GAME_CONFIG, SKILL_DATA } from '@nem-da/shared/constants';
+import { getCharacterById } from '../config/characters';
 export default class GameScene extends Phaser.Scene {
     constructor() {
         super('GameScene');
@@ -12,18 +13,21 @@ export default class GameScene extends Phaser.Scene {
         this.phase = 'waiting';
         this.moveState = { left: false, right: false, up: false };
         this.selectedSkill = 'rock';
+        this.skillBarRects = [];
+        this.skillBarCreated = false;
         this.network = NetworkManager.getInstance();
         this.players = new Map();
         this.aimSystem = new AimSystem(this);
         this.projectileSystem = new ProjectileSystem(this);
     }
     create() {
-        const { width } = this.cameras.main;
+        const { width, height } = this.cameras.main;
         // Background
         this.add.image(width / 2, 360, 'bg_game');
-        // Ground with collision
-        this.ground = this.add.tileSprite(width / 2, GAME_CONFIG.groundLevel + 60, width, 120, 'ground');
-        this.physics.add.existing(this.ground, true);
+        // Ground visual (tileSprite for display only)
+        this.add.tileSprite(width / 2, GAME_CONFIG.groundLevel + 60, width, 120, 'ground').setDepth(-1);
+        // Set world bounds so players can't fall below ground
+        this.physics.world.setBounds(0, 0, width, GAME_CONFIG.groundLevel);
         // Keyboard
         this.setupKeyboardInput();
         // Network
@@ -47,6 +51,85 @@ export default class GameScene extends Phaser.Scene {
         });
         // Launch UI
         this.scene.launch('UIScene');
+        // Create skill bar after scene is ready
+        this.time.delayedCall(300, () => {
+            this.createSkillBar();
+        });
+    }
+    createSkillBar() {
+        if (this.skillBarCreated)
+            return;
+        const room = this.network.getRoom();
+        if (!room)
+            return;
+        const myPlayerId = room.sessionId;
+        if (!myPlayerId)
+            return;
+        const myPlayerData = room.state.players.get(myPlayerId);
+        if (!myPlayerData)
+            return;
+        const charId = myPlayerData.characterId || 'warrior';
+        const char = getCharacterById(charId);
+        if (!char)
+            return;
+        const skills = char.skills;
+        const { width, height } = this.cameras.main;
+        const barY = height - 85;
+        const iconSize = 50;
+        const spacing = 58;
+        const totalWidth = skills.length * spacing;
+        const startX = (width - totalWidth) / 2 + iconSize / 2;
+        this.selectedSkill = skills[0] || 'rock';
+        // Title
+        this.add.text(width / 2, barY - 30, 'CHON DAN (phim 1-4):', {
+            fontSize: '16px', color: '#ffeb3b',
+            stroke: '#000', strokeThickness: 4
+        }).setOrigin(0.5).setDepth(200);
+        const barColors = {
+            rock: 0x9e9e9e, big_rock: 0x757575, bomb: 0xd32f2f, soap: 0x42a5f5,
+            pillow: 0xfff176, fireball: 0xff5722, wind_blade: 0x80deea,
+            shuriken: 0x78909c, hug_rush: 0x8d6e63, honey: 0xffc107,
+            rock_rain: 0x9e9e9e, triple_rock: 0x9e9e9e
+        };
+        skills.forEach((skillId, index) => {
+            const x = startX + index * spacing;
+            const skillData = SKILL_DATA[skillId];
+            if (!skillData)
+                return;
+            const color = barColors[skillId] || 0x666666;
+            const bg = this.add.rectangle(x, barY, iconSize, iconSize, color, 0.9)
+                .setStrokeStyle(2, 0xffffff)
+                .setInteractive({ useHandCursor: true })
+                .setDepth(200);
+            bg.setData('skillId', skillId);
+            this.add.text(x, barY - 8, skillData.name.substring(0, 8), {
+                fontSize: '12px', color: '#fff', fontStyle: 'bold',
+                stroke: '#000', strokeThickness: 3
+            }).setOrigin(0.5).setDepth(201);
+            const dmg = skillData.damage > 0 ? `${skillData.damage}` : '--';
+            this.add.text(x, barY + 11, dmg, {
+                fontSize: '9px', color: '#ffccbc',
+                stroke: '#000', strokeThickness: 2
+            }).setOrigin(0.5).setDepth(201);
+            this.add.text(x, barY + iconSize / 2 - 12, `[${index + 1}]`, {
+                fontSize: '12px', color: '#ffeb3b', fontStyle: 'bold',
+                stroke: '#000', strokeThickness: 3
+            }).setOrigin(0.5).setDepth(201);
+            bg.on('pointerdown', () => {
+                this.selectedSkill = skillId;
+                this.highlightSkill();
+            });
+            this.skillBarRects.push(bg);
+        });
+        this.skillBarCreated = true;
+        this.highlightSkill();
+        console.log('[GameScene] Skill bar created:', skills);
+    }
+    highlightSkill() {
+        this.skillBarRects.forEach(rect => {
+            const isSelected = rect.getData('skillId') === this.selectedSkill;
+            rect.setStrokeStyle(isSelected ? 3 : 1, isSelected ? 0x00ff00 : 0xffffff);
+        });
     }
     syncStateFromServer() {
         const room = this.network.getRoom();
@@ -54,12 +137,9 @@ export default class GameScene extends Phaser.Scene {
             return;
         const state = room.state;
         this.phase = state.phase;
-        // Update turn
         const playerIds = Array.from(state.players.keys());
         this.isMyTurn = playerIds[state.currentTurn] === this.myPlayerId;
-        // Sync wind with aim system
         this.aimSystem.setWindForce(state.windForce || 0);
-        // Sync player positions
         state.players.forEach((player, key) => {
             let entity = this.players.get(key);
             if (!entity) {
@@ -70,7 +150,6 @@ export default class GameScene extends Phaser.Scene {
             }
             entity.updateHPFromServer(player.hp, player.maxHp, player.isAlive);
         });
-        // Sync projectiles
         state.projectiles.forEach((proj, projId) => {
             if (!this.projectileSystem.hasProjectile(projId)) {
                 this.projectileSystem.createProjectile(projId, proj);
@@ -80,10 +159,8 @@ export default class GameScene extends Phaser.Scene {
     }
     createPlayerEntity(key, playerData) {
         console.log(`[createPlayerEntity] key=${key}, charId=${playerData.characterId}, x=${playerData.x}, facingLeft=${playerData.facingLeft}`);
-        const entity = new PlayerEntity(this, playerData);
-        if (this.ground) {
-            this.physics.add.collider(entity.sprite, this.ground);
-        }
+        const isLocal = key === this.myPlayerId;
+        const entity = new PlayerEntity(this, playerData, isLocal);
         this.players.set(key, entity);
         return entity;
     }
@@ -94,7 +171,10 @@ export default class GameScene extends Phaser.Scene {
             left: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A),
             right: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D),
             t: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.T),
-            z: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.Z)
+            z: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.Z),
+            x: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.X),
+            c: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.C),
+            v: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.V)
         };
         const trackKey = (key, direction) => {
             key.on('down', () => { this.moveState[direction] = true; });
@@ -107,7 +187,33 @@ export default class GameScene extends Phaser.Scene {
         trackKey(this.wasd.right, 'right');
         trackKey(this.wasd.up, 'up');
         this.wasd.t.on('down', () => this.network.sendTaunt());
-        this.wasd.z.on('down', () => this.network.sendEmoji('😂'));
+        const emojiMap = { z: '\u{1F602}', x: '\u{1F621}', c: '\u{1F44D}', v: '\u{1F480}' };
+        this.wasd.z.on('down', () => this.network.sendEmoji(emojiMap.z));
+        this.wasd.x.on('down', () => this.network.sendEmoji(emojiMap.x));
+        this.wasd.c.on('down', () => this.network.sendEmoji(emojiMap.c));
+        this.wasd.v.on('down', () => this.network.sendEmoji(emojiMap.v));
+        // Skill selection: number keys 1-4
+        this.skillKeys = [
+            this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ONE),
+            this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.TWO),
+            this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.THREE),
+            this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.FOUR)
+        ];
+        this.skillKeys.forEach((key, index) => {
+            key.on('down', () => {
+                const room = this.network.getRoom();
+                if (!room)
+                    return;
+                const myPlayerData = room.state.players.get(room.sessionId);
+                if (!myPlayerData)
+                    return;
+                const char = getCharacterById(myPlayerData.characterId || 'warrior');
+                if (!char || index >= char.skills.length)
+                    return;
+                this.selectedSkill = char.skills[index];
+                this.highlightSkill();
+            });
+        });
         // Mouse aiming
         this.input.on('pointerdown', () => {
             if (!this.isMyTurn || this.phase !== 'playing')
@@ -115,7 +221,6 @@ export default class GameScene extends Phaser.Scene {
             const myPlayer = this.players.get(this.myPlayerId);
             if (!myPlayer || !myPlayer.isAlive())
                 return;
-            console.log(`Start aim: flipX=${myPlayer.flipX}, x=${myPlayer.x}`);
             this.aimSystem.startAim(myPlayer.x, myPlayer.y, myPlayer.flipX);
         });
         this.input.on('pointermove', (pointer) => {
@@ -132,7 +237,7 @@ export default class GameScene extends Phaser.Scene {
             const { angle, power } = this.aimSystem.stopAim();
             if (power < 0.05)
                 return;
-            console.log(`Throw: angle=${angle}, power=${power}, facingLeft=${myPlayer?.flipX}`);
+            console.log(`Throw: angle=${angle}, power=${power}, skill=${this.selectedSkill}, facingLeft=${myPlayer?.flipX}`);
             this.network.sendThrow(angle, power, this.selectedSkill);
             if (myPlayer) {
                 myPlayer.playAnimation('throw');
@@ -169,15 +274,14 @@ export default class GameScene extends Phaser.Scene {
         });
         this.network.on('hit', (data) => {
             this.showDamageText(data.targetId, data.damage, data.isCritical);
-            // Camera shake based on damage
             const intensity = data.projectileType === 'bomb' || data.projectileType === 'bomb_aoe' ? 0.008 : data.isCritical ? 0.005 : 0.003;
             const duration = data.projectileType === 'bomb' || data.projectileType === 'bomb_aoe' ? 400 : data.isCritical ? 200 : 150;
             this.cameras.main.shake(duration, intensity);
-            // Critical hit flash
             if (data.isCritical) {
-                this.showText('⚡ CRITICAL!', 0xffeb3b);
+                this.showText('\u{26A1} CRITICAL!', 0xffeb3b);
+                this.time.timeScale = 0.3;
+                this.time.delayedCall(300, () => { this.time.timeScale = 1.0; });
             }
-            // Bomb screen flash
             if (data.projectileType === 'bomb' || data.projectileType === 'bomb_aoe') {
                 const flash = this.add.rectangle(this.cameras.main.width / 2, this.cameras.main.height / 2, this.cameras.main.width, this.cameras.main.height, 0xffffff, 0.3).setDepth(999);
                 this.tweens.add({ targets: flash, alpha: 0, duration: 200, onComplete: () => flash.destroy() });
@@ -185,16 +289,22 @@ export default class GameScene extends Phaser.Scene {
             const victim = this.players.get(data.targetId);
             if (victim) {
                 victim.playAnimation('hit');
-                // Knockback
                 const dir = victim.flipX ? 1 : -1;
                 this.tweens.add({
                     targets: victim.sprite, x: victim.sprite.x + dir * 30, duration: 100,
                     yoyo: true, ease: 'Power2'
                 });
-                // Status effect
                 if (data.statusEffect) {
                     victim.showStatusEffect(data.statusEffect);
                 }
+            }
+        });
+        this.network.on('combo', (data) => {
+            if (data.level >= 3) {
+                this.showText(`\u{1F525} COMBO x${data.level}!`, 0xff6600);
+            }
+            else {
+                this.showText(`COMBO x${data.level}!`, 0xffff00);
             }
         });
         this.network.on('death', (data) => {
@@ -299,7 +409,6 @@ export default class GameScene extends Phaser.Scene {
             vx = -speed;
         if (this.moveState.right)
             vx = speed;
-        // Update flipX based on movement direction
         if (vx !== 0) {
             myPlayer.flipX = vx < 0;
         }

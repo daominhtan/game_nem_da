@@ -11,6 +11,7 @@ export class GameRoom extends Room<GameRoomSchema> {
   maxClients = 2
   private turnTimer?: NodeJS.Timeout
   private windChangeInterval?: NodeJS.Timeout
+  private comboCount: Map<string, { count: number; lastHitTime: number }> = new Map()
 
   onCreate(options: any) {
     this.setState(new GameRoomSchema())
@@ -198,6 +199,8 @@ const velocityY = Math.sin(radians) * power * THROW_SPEED
 
   private handleProjectileHit(projectile: ProjectileSchema, target: PlayerSchema | null) {
     const isBomb = projectile.type === "bomb"
+    let comboMultiplier = 1
+    let comboLevel = 0
 
     if (target) {
       let damage = this.getSkillDamage(projectile.type)
@@ -206,8 +209,36 @@ const velocityY = Math.sin(radians) * power * THROW_SPEED
       const isCritical = Math.random() < 0.2
       if (isCritical) damage = Math.floor(damage * 1.5)
 
+      // Combo tracking: 2+ hits within 3 seconds
+      const now = Date.now()
+      const comboData = this.comboCount.get(projectile.ownerId) || { count: 0, lastHitTime: 0 }
+      if (now - comboData.lastHitTime < 3000) {
+        comboData.count++
+        if (comboData.count >= 3) {
+          comboMultiplier = 1.2
+          comboLevel = 3
+        } else if (comboData.count >= 2) {
+          comboMultiplier = 1.1
+          comboLevel = 2
+        }
+      } else {
+        comboData.count = 1
+      }
+      comboData.lastHitTime = now
+      this.comboCount.set(projectile.ownerId, comboData)
+      damage = Math.floor(damage * comboMultiplier)
+
       // Apply damage
-      target.hp = Math.max(0, target.hp - damage)
+        target.hp = Math.max(0, target.hp - damage)
+
+      // Broadcast combo
+      if (comboLevel > 1) {
+        this.broadcast("combo", {
+          playerId: projectile.ownerId,
+          level: comboLevel,
+          multiplier: comboMultiplier
+        })
+      }
 
       // Apply status effects
       if (projectile.type === "soap") {
@@ -252,7 +283,8 @@ const velocityY = Math.sin(radians) * power * THROW_SPEED
         damage,
         isCritical,
         projectileType: projectile.type,
-        statusEffect: target.statusEffect || undefined
+        statusEffect: target.statusEffect || undefined,
+        comboLevel: comboLevel > 1 ? comboLevel : 0
       })
 
       if (target.hp <= 0) {
@@ -360,6 +392,7 @@ const velocityY = Math.sin(radians) * power * THROW_SPEED
       player.isAlive = true
       player.animState = "idle"
     })
+    this.comboCount.clear()
     this.state.currentTurn = Math.random() > 0.5 ? 1 : 0
     this.state.turnNumber = 0
     this.state.phase = "playing"

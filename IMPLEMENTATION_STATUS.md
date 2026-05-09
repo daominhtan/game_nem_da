@@ -45,43 +45,80 @@
 - **Bear**: HP 150, Speed 140, Skills: rock, hug_rush, honey, rock_rain
 
 ### 8. Skills System
-- `rock`: 20 damage, basic projectile
-- `bomb`: 50 damage, AoE radius 80px
-- `soap`: 15 damage + stun effect
-- (Other skills defined in config, ready for implementation)
+- 12 skill types fully implemented on server (rock, big_rock, bomb, soap, pillow, fireball, wind_blade, shuriken, hug_rush, honey, rock_rain, triple_rock)
+- All with correct damage, AoE, status effects
+- Skill cooldown tracking on client side
+- SKILL_DATA config with names, damage, cooldown values
+
+### 9. Skill Selection UI (GameScene, depth 200)
+- Skill bar at bottom of screen with colored icons per skill type, rendered in GameScene (UIScene overlay had rendering issues)
+- Click to select or press number keys 1-4
+- Green border highlights selected skill via stored rect references + `setData('skillId')`
+- Cooldown overlay (semi-transparent arc + countdown text)
+- "CHON DAN (phim 1-4):" title above icons
+
+### 10. Particle VFX (ProjectileSystem)
+- Unique particle trails per projectile type (bomb: fire, soap: bubbles, fireball: embers)
+- Explosion effects: bomb (flash+fire+smoke), soap (rainbow bubbles), pillow (feathers), fireball (embers)
+- Dust particles on ground impact / regular hits
+- Projectile rotation during flight
+
+### 11. Emoji System (Z/X/C/V)
+- Z → 😂, X → 😡, C → 👍, V → 💀
+- Emoji floats above player for 2s
+
+### 12. Combo System
+- 2 hits within 3s = COMBO x2 (1.1x damage)
+- 3 hits within 3s = COMBO x3 (1.2x damage)  
+- Combo displayed mid-screen
+- Reset between rounds
+
+### 13. Critical Slow-Motion
+- 20% critical hit chance (1.5x damage)
+- Slow-motion effect (timeScale 0.3 for 300ms)
+- "⚡ CRITICAL!" flash + camera shake
+
+### 14. Squash & Stretch Animations (PlayerEntity)
+- Idle breathing (subtle scale oscillation)
+- Landing squash
+- Hit: stretch horizontally, squish vertically
+- Throw: windup → release → bounce
+- Die: squish → dramatic sink
+- Taunt: bouncy + scale wobble
+
+### 15. Ground Physics Fix
+- Removed ground collider (`tileSprite` + `Rectangle` static body) entirely
+- Uses `physics.world.setBounds(0, 0, 1280, GAME_CONFIG.groundLevel=580)` to block falling through floor
+- Enemy players: `setAllowGravity(false)` — position driven purely by server interpolation, no gravity jitter
+- Local player keeps gravity for natural landing on ground level
+- Fixes root cause: interpolation was overriding collider position each frame, pushing enemy through ground
 
 ## 🚧 Partially Implemented
 
 ### Animations
 - Basic structure in place (idle, run, jump, aim, throw, hit, die)
 - Animation playback based on server state
-- Squash & stretch: TODO
+- Squash & stretch: ✅ (detailed above)
 - Parallax backgrounds: TODO
 
 ### HP System
 - Green bar (current HP): ✅
-- Yellow "afterburn" bar (delayed): TODO
-- Color changes (green→orange→red): TODO
-- Knockback on hit: TODO
+- Yellow "afterburn" bar (delayed): ✅
+- Color changes (green→orange→red): ✅
+- Knockback on hit: ✅
 
 ## ❌ Not Yet Implemented (Priority 2-4)
 
 ### Polish
-- [ ] Squash & stretch animations
-- [ ] Particle systems (trails, explosions, dust)
-- [ ] Camera shake + slow motion
 - [ ] Sound effects + BGM
-- [ ] Skill cooldown UI
+- [ ] Parallax backgrounds
+- [ ] Platform tilemaps (currently flat ground only)
 
 ### Content
 - [ ] 3 Maps (only Forest Island placeholder)
-- [ ] Status effects (stun, sleep, slide)
-- [ ] Emoji system (Z/X/C/V shortcuts)
-- [ ] Taunt animations
+- [ ] Taunt animations (basic tween exists, no spritesheet)
 
 ### Fun Features
-- [ ] Combo system
-- [ ] Critical hits + slow motion
 - [ ] Easter eggs
 - [ ] Win/lose quotes
 - [ ] Confetti
@@ -120,10 +157,10 @@ nem-da-game/
 
 ## 🏃 Next Steps
 
-1. Add real sprite assets (replace placeholders)
+1. Add sound effects and BGM
 2. Implement status effects (stun, sleep, slide)
-3. Add sound effects and BGM
-4. Polish animations (squash & stretch)
-5. Add particle effects for projectiles
-6. Implement emoji system
-7. Add more maps
+3. Parallax backgrounds
+4. Platform tilemaps (currently flat ground only)
+5. 3 Maps (only Forest Island placeholder)
+6. Add real sprite assets (replace placeholders)
+7. Easter eggs, win/lose quotes, confetti, random funny names

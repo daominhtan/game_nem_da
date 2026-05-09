@@ -49,6 +49,7 @@ export default class NetworkManager {
     this.room.onMessage('emoji', (data) => this.emit('emoji', data))
     this.room.onMessage('windChange', (data) => this.emit('windChange', data))
     this.room.onMessage('statusEffect', (data) => this.emit('statusEffect', data))
+    this.room.onMessage('combo', (data) => this.emit('combo', data))
 
     return this.room
   }
