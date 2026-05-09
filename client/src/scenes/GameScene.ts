@@ -38,7 +38,7 @@ export default class GameScene extends Phaser.Scene {
     this.add.image(width / 2, 360, 'bg_game')
 
     // Ground visual (tileSprite for display only)
-    this.add.tileSprite(width / 2, GAME_CONFIG.groundLevel + 60, width, 120, 'ground').setDepth(-1)
+    this.add.tileSprite(width / 2, GAME_CONFIG.groundLevel + 100, width, 200, 'ground').setDepth(10)
 
     // Set world bounds so players can't fall below ground
     this.physics.world.setBounds(0, 0, width, GAME_CONFIG.groundLevel)

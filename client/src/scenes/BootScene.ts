@@ -138,18 +138,89 @@ export default class BootScene extends Phaser.Scene {
   private createGroundTexture() {
     const canvas = document.createElement('canvas')
     canvas.width = 1280
-    canvas.height = 120
+    canvas.height = 200
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    ctx.fillStyle = '#8B4513'
-    ctx.fillRect(0, 0, 1280, 120)
-    ctx.fillStyle = '#4CAF50'
-    ctx.fillRect(0, 0, 1280, 15)
-    ctx.fillStyle = '#388E3C'
-    for (let i = 0; i < 40; i++) {
-      ctx.fillRect(i * 32 + 10, 10, 3, 12)
-      ctx.fillRect(i * 32 + 18, 8, 3, 14)
+    // --- Dirt/soil layers ---
+    const dirtGrad = ctx.createLinearGradient(0, 30, 0, 200)
+    dirtGrad.addColorStop(0, '#5D4037')
+    dirtGrad.addColorStop(0.3, '#6D4C41')
+    dirtGrad.addColorStop(0.7, '#5D4037')
+    dirtGrad.addColorStop(1, '#4E342E')
+    ctx.fillStyle = dirtGrad
+    ctx.fillRect(0, 30, 1280, 170)
+
+    // Dirt texture spots (darker/lighter patches)
+    for (let i = 0; i < 180; i++) {
+      const x = Math.random() * 1280
+      const y = 30 + Math.random() * 170
+      const r = 2 + Math.random() * 6
+      const alpha = 0.1 + Math.random() * 0.2
+      ctx.fillStyle = Math.random() > 0.5 ? `rgba(255,255,255,${alpha})` : `rgba(0,0,0,${alpha})`
+      ctx.beginPath()
+      ctx.arc(x, y, r, 0, Math.PI * 2)
+      ctx.fill()
+    }
+
+    // Small stones/pebbles in dirt
+    for (let i = 0; i < 25; i++) {
+      const x = Math.random() * 1280
+      const y = 50 + Math.random() * 140
+      const w = 4 + Math.random() * 10
+      const h = 3 + Math.random() * 6
+      const gray = 100 + Math.floor(Math.random() * 80)
+      ctx.fillStyle = `rgb(${gray},${gray},${gray})`
+      ctx.beginPath()
+      ctx.ellipse(x, y, w, h, 0, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.strokeStyle = `rgb(${gray-30},${gray-30},${gray-30})`
+      ctx.lineWidth = 0.5
+      ctx.stroke()
+    }
+
+    // --- Grass layer ---
+    const grassGrad = ctx.createLinearGradient(0, 0, 0, 35)
+    grassGrad.addColorStop(0, '#66BB6A')
+    grassGrad.addColorStop(0.4, '#4CAF50')
+    grassGrad.addColorStop(1, '#388E3C')
+    ctx.fillStyle = grassGrad
+    ctx.fillRect(0, 0, 1280, 35)
+
+    // Grass blade clusters
+    for (let i = 0; i < 200; i++) {
+      const x = Math.random() * 1280
+      const bladeHeight = 8 + Math.random() * 18
+      const bladeWidth = 1.5 + Math.random() * 2
+      const shade = Math.random() * 40
+      ctx.fillStyle = `rgb(${80 + shade}, ${160 + shade}, ${50 + shade})`
+      ctx.beginPath()
+      ctx.ellipse(x, 30 - bladeHeight * 0.3, bladeWidth, bladeHeight, Math.random() * 0.4 - 0.2, 0, Math.PI * 2)
+      ctx.fill()
+
+      // Second blade at a slight offset
+      ctx.beginPath()
+      ctx.ellipse(x + 3 + Math.random() * 4, 30 - bladeHeight * 0.2, bladeWidth * 0.7, bladeHeight * 0.8, Math.random() * 0.3 - 0.15, 0, Math.PI * 2)
+      ctx.fill()
+    }
+
+    // Shadow line at grass-dirt boundary
+    ctx.fillStyle = 'rgba(0,0,0,0.15)'
+    ctx.fillRect(0, 28, 1280, 5)
+
+    // Small flowers/details on grass
+    for (let i = 0; i < 12; i++) {
+      const x = Math.random() * 1280
+      const y = Math.random() * 20
+      const flowerColors = ['#FFF176', '#EF9A9A', '#CE93D8', '#90CAF9']
+      ctx.fillStyle = flowerColors[Math.floor(Math.random() * flowerColors.length)]
+      ctx.beginPath()
+      ctx.arc(x, y, 2 + Math.random() * 2, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.fillStyle = '#FFF9C4'
+      ctx.beginPath()
+      ctx.arc(x + Math.random() * 3, y - 1 + Math.random() * 3, 1, 0, Math.PI * 2)
+      ctx.fill()
     }
 
     this.textures.addCanvas('ground', canvas)
