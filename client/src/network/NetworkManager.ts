@@ -9,6 +9,7 @@ export default class NetworkManager {
   private client: Client
   private room?: Room
   private messageHandlers: Map<string, MessageHandler[]> = new Map()
+  private _isBotMatch: boolean = false
 
   private constructor() {
     const serverUrl = (import.meta as any).env.VITE_SERVER_URL || 'ws://localhost:2567'
@@ -22,12 +23,13 @@ export default class NetworkManager {
     return NetworkManager.instance
   }
 
-  async joinRoom() {
-    this.room = await this.client.joinOrCreate('game_room', {
-      maxClients: GAME_CONFIG.maxPlayers
-    })
+  get isBotMatch(): boolean {
+    return this._isBotMatch
+  }
 
-    // Listen for state changes
+  private setupRoomHandlers() {
+    if (!this.room) return
+
     this.room.state.players.onAdd((player: PlayerState, key: string) => {
       this.emit('playerJoin', { player, key })
     })
@@ -36,7 +38,17 @@ export default class NetworkManager {
       this.emit('playerLeave', { player, key })
     })
 
-    // Listen for messages
+    // Listen for phase changes on game rooms
+    if (typeof (this.room.state as any).listen === 'function') {
+      try {
+        ;(this.room.state as any).listen('phase', (currentValue: string) => {
+          this.emit('phaseChange', { current: currentValue })
+        })
+      } catch (e) {
+        // not a game room with schema state, ignore
+      }
+    }
+
     this.room.onMessage('turnStart', (data) => this.emit('turnStart', data))
     this.room.onMessage('turnEnd', (data) => this.emit('turnEnd', data))
     this.room.onMessage('hit', (data) => this.emit('hit', data))
@@ -50,6 +62,96 @@ export default class NetworkManager {
     this.room.onMessage('windChange', (data) => this.emit('windChange', data))
     this.room.onMessage('statusEffect', (data) => this.emit('statusEffect', data))
     this.room.onMessage('combo', (data) => this.emit('combo', data))
+  }
+
+  async joinRoom() {
+    this.room = await this.client.joinOrCreate('game_room', {
+      maxClients: GAME_CONFIG.maxPlayers
+    })
+    this.setupRoomHandlers()
+    return this.room
+  }
+
+  async joinRoomById(roomId: string) {
+    this.leaveRoom()
+    this.room = await this.client.joinById(roomId)
+    this.setupRoomHandlers()
+    return this.room
+  }
+
+  async joinMatchmaking() {
+    this.leaveRoom()
+    this._isBotMatch = false
+    this.room = await this.client.joinOrCreate('matchmaking_room')
+
+    this.room.onMessage('matchFound', async (data) => {
+      this._isBotMatch = data.isBotMatch || false
+      try {
+        await this.joinRoomById(data.roomId)
+        this.emit('matchFound', data)
+      } catch (err) {
+        this.emit('networkError', { message: (err as Error)?.message || 'Không vào được trận!' })
+      }
+    })
+
+    this.room.onMessage('queueUpdate', (data) => {
+      this.emit('queueUpdate', data)
+    })
+
+    this.room.onMessage('roomCreated', (data) => {
+      this.emit('roomCreated', data)
+    })
+
+    this.room.onMessage('error', (data) => {
+      this.emit('networkError', data)
+    })
+
+    return this.room
+  }
+
+  async createPrivateRoom() {
+    this.leaveRoom()
+    this._isBotMatch = false
+    this.room = await this.client.joinOrCreate('matchmaking_room', {
+      action: 'create'
+    })
+
+    this.room.onMessage('roomCreated', async (data) => {
+      try {
+        await this.joinRoomById(data.roomId)
+        this.emit('roomCreated', data)
+      } catch (err) {
+        this.emit('networkError', { message: (err as Error)?.message || 'Không thể vào phòng!' })
+      }
+    })
+
+    this.room.onMessage('error', (data) => {
+      this.emit('networkError', data)
+    })
+
+    return this.room
+  }
+
+  async joinByCode(code: string) {
+    this.leaveRoom()
+    this._isBotMatch = false
+    this.room = await this.client.joinOrCreate('matchmaking_room', {
+      action: 'joinByCode',
+      code
+    })
+
+    this.room.onMessage('matchFound', async (data) => {
+      try {
+        await this.joinRoomById(data.roomId)
+        this.emit('matchFound', data)
+      } catch (err) {
+        this.emit('networkError', { message: (err as Error)?.message || 'Mã phòng không hợp lệ!' })
+      }
+    })
+
+    this.room.onMessage('error', (data) => {
+      this.emit('networkError', data)
+    })
 
     return this.room
   }
@@ -101,7 +203,6 @@ export default class NetworkManager {
       this.room.leave()
       this.room = undefined
     }
-    this.messageHandlers.clear()
   }
 
   getRoom() {

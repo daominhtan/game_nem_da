@@ -2,6 +2,8 @@ import { Room, Client } from '@colyseus/core'
 import { Schema, type, MapSchema } from '@colyseus/schema'
 import { GameRoomSchema, PlayerSchema, ProjectileSchema } from './schema.js'
 import { ENERGY, PLATFORMS, SPAWN_POSITIONS, SKILL_DATA } from '@nem-da/shared/constants'
+import { BotPlayer } from '../services/BotService.js'
+import { removeRoomCode } from './MatchmakingRoom.js'
 
 const GRAVITY = 980
 const GROUND_Y = 580
@@ -12,17 +14,38 @@ const PLAYER_HIT_RADIUS = 55
 const PROJ_PREV_STEPS = 3
 
 export class GameRoom extends Room<GameRoomSchema> {
-  maxClients = 2
   private turnTimer?: NodeJS.Timeout
   private windChangeInterval?: NodeJS.Timeout
   private comboCount: Map<string, { count: number; lastHitTime: number }> = new Map()
   private hasThrownThisTurn: boolean = false
   private movedThisTurn: Set<string> = new Set()
   private timesDefended: Map<string, number> = new Map()
+  private roomCode: string = ''
+  private botPlayer: BotPlayer | null = null
+  private readyPlayers: Set<string> = new Set()
 
   onCreate(options: any) {
     this.setState(new GameRoomSchema())
     this.state.phase = "waiting"
+    this.seatReservationTime = 120
+
+    if (options.roomCode) {
+      this.roomCode = options.roomCode
+      console.log(`[GameRoom] Private room created with code: ${options.roomCode}`)
+    }
+
+    if (options.botMode) {
+      this.botPlayer = new BotPlayer('bot', 0)
+      this.state.players.set('bot', this.botPlayer.player)
+      this.state.phase = "selecting"
+      setTimeout(() => {
+        if (this.state.players.has('bot')) {
+          this.botPlayer!.selectCharacter()
+          const bot = this.state.players.get('bot')!
+          console.log(`[GameRoom] Bot selected character: ${bot.characterId}`)
+        }
+      }, 500)
+    }
 
     // Handle player input
     this.onMessage("move", (client, data) => {
@@ -56,10 +79,14 @@ export class GameRoom extends Room<GameRoomSchema> {
       const player = this.state.players.get(client.sessionId)
       if (player) {
         player.characterId = data.characterId || "warrior"
-        
-        // Check if both players have selected a character (not default warrior with no selection)
-        const allReady = Array.from(this.state.players.values()).every(p => p.characterId !== "warrior" || data.characterId !== "")
-        if (allReady && this.state.players.size === 2) {
+        this.readyPlayers.add(client.sessionId)
+
+        if (this.botPlayer) {
+          this.readyPlayers.add('bot')
+        }
+
+        if (this.readyPlayers.size >= 2 && this.state.players.size === 2) {
+          this.readyPlayers.clear()
           this.startGame()
         }
       }
@@ -76,6 +103,11 @@ export class GameRoom extends Room<GameRoomSchema> {
   }
 
   onJoin(client: Client, options: any) {
+    if (this.state.players.size >= 2) {
+      client.leave()
+      return
+    }
+
     const player = new PlayerSchema()
     player.id = client.sessionId
 
@@ -93,13 +125,22 @@ export class GameRoom extends Room<GameRoomSchema> {
 
     if (this.state.players.size === 2) {
       this.state.phase = "selecting"
+      this.lock()
     }
   }
 
   onLeave(client: Client) {
     this.state.players.delete(client.sessionId)
+    this.readyPlayers.delete(client.sessionId)
     if (this.state.players.size < 2 && this.state.phase === "playing") {
       this.state.phase = "gameEnd"
+    }
+  }
+
+  onDispose() {
+    if (this.roomCode) {
+      removeRoomCode(this.roomCode)
+      console.log(`[GameRoom] Cleaned up room code: ${this.roomCode}`)
     }
   }
 
@@ -165,6 +206,29 @@ export class GameRoom extends Room<GameRoomSchema> {
     }
 
     this.broadcast("turnStart", { playerId: currentPlayerId, timeLeft: turnTime })
+
+    // Bot auto-throw if it's the bot's turn
+    if (this.botPlayer && currentPlayerId === 'bot') {
+      const targetPlayer = Array.from(this.state.players.values()).find(p => p.id !== 'bot')
+      const bot = this.botPlayer
+      if (targetPlayer) {
+        const delay = 1000 + Math.random() * 2000
+        setTimeout(() => {
+          if (this.state.phase === 'playing' && !this.hasThrownThisTurn) {
+            const action = bot.decideAction(
+              bot.player.x,
+              bot.player.y,
+              targetPlayer.x,
+              targetPlayer.y,
+              this.state.windForce
+            )
+            this.hasThrownThisTurn = true
+            this.handleThrow(bot.player, action)
+            bot.reduceCooldowns()
+          }
+        }, delay)
+      }
+    }
   }
 
   private handleThrow(player: PlayerSchema, data: any) {
@@ -491,6 +555,7 @@ const velocityY = Math.sin(radians) * power * THROW_SPEED
     })
     this.comboCount.clear()
     this.timesDefended.clear()
+    if (this.botPlayer) this.botPlayer.reset()
     this.state.currentTurn = Math.random() > 0.5 ? 1 : 0
     this.state.turnNumber = 0
     this.state.phase = "playing"
