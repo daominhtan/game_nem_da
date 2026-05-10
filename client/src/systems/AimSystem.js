@@ -3,8 +3,6 @@ import { PHYSICS } from '@nem-da/shared/constants';
 export default class AimSystem {
     constructor(scene) {
         this.isAimingFlag = false;
-        this.screenStartX = 0;
-        this.screenStartY = 0;
         this.worldStartX = 0;
         this.worldStartY = 0;
         this.currentScreenX = 0;
@@ -27,8 +25,6 @@ export default class AimSystem {
         this.isAimingFlag = true;
         this.worldStartX = worldX;
         this.worldStartY = worldY;
-        this.screenStartX = screenX;
-        this.screenStartY = screenY;
         this.currentScreenX = screenX;
         this.currentScreenY = screenY;
         this.facingLeft = facingLeft;
@@ -38,8 +34,13 @@ export default class AimSystem {
             return;
         this.currentScreenX = screenX;
         this.currentScreenY = screenY;
-        const dx = screenX - this.screenStartX;
-        const dy = screenY - this.screenStartY;
+        // Recalculate player's current screen position from current camera scroll
+        // so aim angle remains correct even when camera moves during aiming
+        const camera = this.scene.cameras.main;
+        const playerScreenX = this.worldStartX - camera.scrollX;
+        const playerScreenY = this.worldStartY - camera.scrollY;
+        const dx = screenX - playerScreenX;
+        const dy = screenY - playerScreenY;
         this.angle = Phaser.Math.RadToDeg(Math.atan2(dy, dx));
         if (this.facingLeft) {
             if (this.angle > -90 && this.angle <= 0) {

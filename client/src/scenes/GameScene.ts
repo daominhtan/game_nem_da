@@ -265,6 +265,22 @@ export default class GameScene extends Phaser.Scene {
       targetY = Phaser.Math.Clamp(avgY, GAME_CONFIG.height / 2, GAME_CONFIG.groundLevel)
     }
 
+    // Keep active player visible and in a comfortable position for aiming
+    const myPlayer = this.players.get(this.myPlayerId)
+    if (myPlayer && myPlayer.isAlive() && this.isMyTurn) {
+      const scrollX = targetX - GAME_CONFIG.width / 2
+      const playerScreenX = myPlayer.x - scrollX
+      const margin = 150
+
+      if (playerScreenX < margin) {
+        targetX = myPlayer.x + GAME_CONFIG.width / 2 - margin
+      } else if (playerScreenX > GAME_CONFIG.width - margin) {
+        targetX = myPlayer.x - GAME_CONFIG.width / 2 + margin
+      }
+
+      targetX = Phaser.Math.Clamp(targetX, GAME_CONFIG.width / 2, GAME_CONFIG.worldWidth - GAME_CONFIG.width / 2)
+    }
+
     this.cameraTargetX += (targetX - this.cameraTargetX) * 0.08
     this.cameraTargetY += (targetY - this.cameraTargetY) * 0.08
 
@@ -518,7 +534,14 @@ export default class GameScene extends Phaser.Scene {
       if (!myPlayer || !myPlayer.isAlive()) return
       const screenX = myPlayer.x - this.cameras.main.scrollX
       const screenY = myPlayer.y - this.cameras.main.scrollY
-      this.aimSystem.startAim(myPlayer.x, myPlayer.y, screenX, screenY, myPlayer.flipX)
+      // Determine aim direction toward opponent, not based on movement flipX
+      let aimFacingLeft = myPlayer.flipX
+      this.players.forEach((p, key) => {
+        if (key !== this.myPlayerId && p.isAlive()) {
+          aimFacingLeft = myPlayer.x > p.x
+        }
+      })
+      this.aimSystem.startAim(myPlayer.x, myPlayer.y, screenX, screenY, aimFacingLeft)
     })
 
     this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
@@ -536,7 +559,7 @@ export default class GameScene extends Phaser.Scene {
       if (power < 0.05) return
 
       this.hasThrownThisTurn = true
-      console.log(`Throw: angle=${angle}, power=${power}, skill=${this.selectedSkill}, facingLeft=${myPlayer?.flipX}`)
+      console.log(`Throw: angle=${angle}, power=${power}, skill=${this.selectedSkill}`)
       this.network.sendThrow(angle, power, this.selectedSkill)
 
       if (myPlayer) {
@@ -769,9 +792,12 @@ export default class GameScene extends Phaser.Scene {
       if (this.moveState.up && body.onFloor()) {
         body.setVelocityY(-900)
       }
-      if (this.moveState.left && myPlayer.x > this.defendStartX - this.defendRange) {
+      const isLeftSide = myPlayer.x < GAME_CONFIG.worldWidth / 2
+      const leftLimit = isLeftSide ? 750 : 150
+      const rightLimit = isLeftSide ? GAME_CONFIG.worldWidth - 150 : 1810
+      if (this.moveState.left && myPlayer.x > this.defendStartX - this.defendRange && myPlayer.x > leftLimit) {
         vx = -speed
-      } else if (this.moveState.right && myPlayer.x < this.defendStartX + this.defendRange) {
+      } else if (this.moveState.right && myPlayer.x < this.defendStartX + this.defendRange && myPlayer.x < rightLimit) {
         vx = speed
       }
     }
