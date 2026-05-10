@@ -44,6 +44,12 @@
 - [x] Squash & stretch animations (idle breathing, landing, hit, throw, die, taunt)
 - [x] HP bars (green current, yellow afterburn, color changes, knockback)
 - [x] Ground physics fix (world bounds, enemy no gravity, local player gravity)
+- [x] Status effects (stunned/sleeping/slowed) with full VFX + timer countdown
+
+### Bug Fixes
+- [x] Multi-throw spam (hasThrownThisTurn flag on server + client)
+- [x] "Chơi lại" render nhân vật (scene shutdown cleanup + leaveRoom)
+- [x] "Chơi lại" render lực/hướng (recreate AimSystem/ProjectileSystem in create())
 
 ### UI
 - [x] Skill selection bar (bottom, colored icons, number keys 1-4, cooldown overlay)
@@ -58,19 +64,18 @@
 
 ### Phase 1: Status Effects & Polish (Current)
 
-#### Status Effects (Server + Client)
-- [ ] `stunned` effect (soap hit → 2s không kiểm soát, trượt ngã)
+#### Status Effects (Server + Client) — ✅ DONE
+- [x] `stunned` effect (soap hit → 2s không kiểm soát, trượt ngã)
   - Server: set statusEffect + statusDuration, block move/throw
-  - Client: animation "slide" loop, indicator icon trên đầu
-  - Hết effect: server clear, client về idle
-- [ ] `sleeping` effect (pillow hit → 2s ngủ, không làm gì được)
-  - Server: set statusEffect, skip turn entirely
-  - Client: ZZZ animation, nhân vật gục đầu
-- [ ] `slowed` effect (honey hit → 50% speed trong 3s)
-  - Server: giảm moveSpeed
-  - Client: tint màu vàng, animation chậm lại
-- [ ] UI status indicator trên đầu nhân vật (icon + timer countdown)
-- [ ] Turn auto-skip when defender stunned/sleeping
+  - Client: dizzy rotation + shake + yellow spark particles + timer countdown
+- [x] `sleeping` effect (pillow hit → 2s ngủ, không làm gì được)
+  - Server: set statusEffect, turn shortened to 5s
+  - Client: ZZZ floating text + tint + bob animation
+- [x] `slowed` effect (honey hit → 50% speed trong 3s)
+  - Server: giảm moveSpeed (client-side 50% speed)
+  - Client: tint xanh + trailing ice particles
+- [x] UI status indicator trên đầu nhân vật (icon + timer countdown)
+- [x] Turn auto-shorten (5s) when defender stunned/sleeping
 
 #### Parallax Backgrounds
 - [ ] 3-layer parallax (far ×0.05, mid ×0.2, near ×0.5)

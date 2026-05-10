@@ -11,13 +11,18 @@ export default class PlayerEntity {
   private debugRect: Phaser.GameObjects.Rectangle
   private yellowTargetPercent: number
   private statusText?: Phaser.GameObjects.Text
+  private statusTimerText?: Phaser.GameObjects.Text
   private idleTween?: Phaser.Tweens.Tween
   private breathTime: number = 0
   private wasOnFloor: boolean = true
   private statusEffect: string = ''
+  private statusEffectDuration: number = 0
   private statusTimer?: Phaser.Time.TimerEvent
   private statusParticles?: Phaser.GameObjects.Particles.ParticleEmitter
   private shieldGraphic?: Phaser.GameObjects.Graphics
+  private zzzTexts: Phaser.GameObjects.Text[] = []
+  private zzzTimer?: Phaser.Time.TimerEvent
+  private stunAngle: number = 0
 
   constructor(scene: Phaser.Scene, state: PlayerState, isLocal: boolean = false) {
     this.playerState = state
@@ -61,7 +66,10 @@ export default class PlayerEntity {
 
     // Update status text position
     if (this.statusText) {
-      this.statusText.setPosition(this.sprite.x, this.sprite.y - 100)
+      this.statusText.setPosition(this.sprite.x, this.sprite.y - 110)
+    }
+    if (this.statusTimerText) {
+      this.statusTimerText.setPosition(this.sprite.x, this.sprite.y - 90)
     }
 
     // Idle breathing animation (subtle scale oscillation)
@@ -83,9 +91,19 @@ export default class PlayerEntity {
     this.updateHPBar()
     this.debugRect.setPosition(this.sprite.x, this.sprite.y)
 
-    // Stun animation: rapid small shake
+    // Status effect animations
     if (this.statusEffect === 'stunned') {
-      this.sprite.x += Math.sin(time * 0.05) * 1.5
+      this.stunAngle += delta * 0.008
+      this.sprite.x += Math.sin(time * 0.008) * 2.5
+      this.sprite.rotation = Math.sin(this.stunAngle * 3) * 0.15
+      this.sprite.y -= 1
+      if (this.sprite.y < this.targetY - 5) this.sprite.y += 2
+    } else {
+      this.sprite.rotation = 0
+    }
+
+    if (this.statusEffect === 'sleeping') {
+      this.sprite.y += Math.sin(time * 0.003) * 0.3
     }
   }
 
@@ -128,10 +146,52 @@ export default class PlayerEntity {
   }
 
   updateStatusFromServer(effect: string, duration: number) {
+    this.clearStatusEffects()
     this.statusEffect = effect
+    this.statusEffectDuration = duration
     this.sprite.clearTint()
+    this.sprite.rotation = 0
 
-    // Remove old status particles
+    if (!effect) return
+
+    const scene = this.sprite.scene
+
+    switch (effect) {
+      case 'stunned':
+        this.sprite.setTint(0xffff44)
+        this.startStunParticles()
+        break
+      case 'sleeping':
+        this.sprite.setTint(0xcc88ff)
+        this.startZZZ()
+        break
+      case 'slowed':
+        this.sprite.setTint(0x88ccff)
+        this.startSlowParticles()
+        break
+      case 'wind_shield':
+        this.drawShield()
+        break
+      case 'shield_break':
+        this.flashShieldBreak()
+        return
+    }
+
+    // Auto-clear after duration
+    if (duration > 0) {
+      this.statusTimer = scene.time.addEvent({
+        delay: 200,
+        repeat: Math.floor(duration * 5) - 1,
+        callback: () => {
+          const remaining = this.statusTimer!.getRepeatCount() * 0.2
+          this.updateStatusTimerDisplay(Math.ceil(remaining))
+          if (remaining <= 0) this.updateStatusFromServer('', 0)
+        }
+      })
+    }
+  }
+
+  private clearStatusEffects() {
     if (this.statusParticles) {
       this.statusParticles.destroy()
       this.statusParticles = undefined
@@ -144,35 +204,99 @@ export default class PlayerEntity {
       this.statusTimer.destroy()
       this.statusTimer = undefined
     }
+    if (this.statusTimerText) {
+      this.statusTimerText.destroy()
+      this.statusTimerText = undefined
+    }
+    this.zzzTexts.forEach(t => t.destroy())
+    this.zzzTexts = []
+    if (this.zzzTimer) {
+      this.zzzTimer.destroy()
+      this.zzzTimer = undefined
+    }
+  }
 
-    if (!effect) return
-
+  private updateStatusTimerDisplay(seconds: number) {
     const scene = this.sprite.scene
-
-    switch (effect) {
-      case 'stunned':
-        this.sprite.setTint(0xffff44)
-        break
-      case 'sleeping':
-        this.sprite.setTint(0xcc88ff)
-        break
-      case 'slowed':
-        this.sprite.setTint(0x88ccff)
-        break
-      case 'wind_shield':
-        this.drawShield()
-        break
-      case 'shield_break':
-        this.flashShieldBreak()
-        return
+    if (seconds <= 0) {
+      if (this.statusTimerText) {
+        this.statusTimerText.destroy()
+        this.statusTimerText = undefined
+      }
+      return
     }
-
-    // Auto-clear after duration
-    if (duration > 0) {
-      this.statusTimer = scene.time.delayedCall(duration * 1000, () => {
-        this.updateStatusFromServer('', 0)
-      })
+    if (!this.statusTimerText) {
+      this.statusTimerText = scene.add.text(this.sprite.x, this.sprite.y - 90, '', {
+        fontSize: '16px', color: '#ffffff', fontStyle: 'bold',
+        stroke: '#000', strokeThickness: 3
+      }).setOrigin(0.5).setDepth(101)
     }
+    this.statusTimerText.setText(`${seconds}s`)
+  }
+
+  private startStunParticles() {
+    const scene = this.sprite.scene
+    this.statusParticles = scene.add.particles(0, 0, 'fx_spark', {
+      follow: this.sprite,
+      speed: { min: 5, max: 20 },
+      angle: { min: 0, max: 360 },
+      scale: { start: 0.2, end: 0 },
+      alpha: { start: 0.6, end: 0 },
+      lifespan: 400,
+      quantity: 1,
+      frequency: 100,
+      tint: [0xffff00, 0xffaa00]
+    })
+    this.statusParticles.setDepth(51)
+  }
+
+  private startSlowParticles() {
+    const scene = this.sprite.scene
+    this.statusParticles = scene.add.particles(0, 0, 'fx_spark', {
+      follow: this.sprite,
+      speed: { min: 8, max: 25 },
+      angle: { min: 200, max: 340 },
+      scale: { start: 0.25, end: 0 },
+      alpha: { start: 0.5, end: 0 },
+      lifespan: 500,
+      quantity: 1,
+      frequency: 150,
+      tint: [0x88ccff, 0x66aaff]
+    })
+    this.statusParticles.setDepth(51)
+  }
+
+  private startZZZ() {
+    const scene = this.sprite.scene
+    this.zzzTimer = scene.time.addEvent({
+      delay: 1200,
+      loop: true,
+      callback: () => {
+        const zzz = scene.add.text(
+          this.sprite.x + Phaser.Math.Between(-10, 10),
+          this.sprite.y - 60,
+          'Z',
+          { fontSize: `${Phaser.Math.Between(14, 24)}px`, color: '#cc88ff',
+            stroke: '#000', strokeThickness: 2 }
+        ).setOrigin(0.5).setDepth(101)
+
+        this.zzzTexts.push(zzz)
+
+        scene.tweens.add({
+          targets: zzz,
+          y: zzz.y - Phaser.Math.Between(30, 60),
+          alpha: 0,
+          x: zzz.x + Phaser.Math.Between(-15, 15),
+          duration: 1500,
+          ease: 'Power2',
+          onComplete: () => {
+            zzz.destroy()
+            const idx = this.zzzTexts.indexOf(zzz)
+            if (idx > -1) this.zzzTexts.splice(idx, 1)
+          }
+        })
+      }
+    })
   }
 
   private drawShield() {
@@ -369,5 +493,12 @@ export default class PlayerEntity {
     this.hpBarYellow.destroy()
     this.debugRect.destroy()
     if (this.statusText) this.statusText.destroy()
+    if (this.statusTimerText) this.statusTimerText.destroy()
+    if (this.statusTimer) this.statusTimer.destroy()
+    if (this.statusParticles) this.statusParticles.destroy()
+    if (this.shieldGraphic) this.shieldGraphic.destroy()
+    if (this.zzzTimer) this.zzzTimer.destroy()
+    this.zzzTexts.forEach(t => t.destroy())
+    this.zzzTexts = []
   }
 }
