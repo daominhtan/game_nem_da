@@ -16,6 +16,7 @@ export class PlayerSchema extends Schema {
   @type("number") statusDuration = 0
   @type("uint8") kills = 0
   @type("uint8") deaths = 0
+  @type("uint8") energy = 3
   @type("boolean") isAlive = true
 }
 

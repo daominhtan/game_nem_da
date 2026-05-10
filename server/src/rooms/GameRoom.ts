@@ -1,13 +1,15 @@
 import { Room, Client } from '@colyseus/core'
 import { Schema, type, MapSchema } from '@colyseus/schema'
 import { GameRoomSchema, PlayerSchema, ProjectileSchema } from './schema.js'
+import { ENERGY, PLATFORMS, SPAWN_POSITIONS, SKILL_DATA } from '@nem-da/shared/constants'
 
 const GRAVITY = 980
 const GROUND_Y = 580
-const MAX_TURN_TIME = 15 // seconds
-const THROW_SPEED = 1500 // base speed multiplier for throw velocity
-const PLAYER_HIT_RADIUS = 55 // hitbox radius — visual character ~128px wide
-const PROJ_PREV_STEPS = 3 // sub-step checks for swept collision
+const WORLD_WIDTH = 2560
+const MAX_TURN_TIME = 15
+const THROW_SPEED = 1500
+const PLAYER_HIT_RADIUS = 55
+const PROJ_PREV_STEPS = 3
 
 export class GameRoom extends Room<GameRoomSchema> {
   maxClients = 2
@@ -15,6 +17,8 @@ export class GameRoom extends Room<GameRoomSchema> {
   private windChangeInterval?: NodeJS.Timeout
   private comboCount: Map<string, { count: number; lastHitTime: number }> = new Map()
   private hasThrownThisTurn: boolean = false
+  private movedThisTurn: Set<string> = new Set()
+  private timesDefended: Map<string, number> = new Map()
 
   onCreate(options: any) {
     this.setState(new GameRoomSchema())
@@ -24,6 +28,11 @@ export class GameRoom extends Room<GameRoomSchema> {
     this.onMessage("move", (client, data) => {
       const player = this.state.players.get(client.sessionId)
       if (player && player.isAlive) {
+        const dx = Math.abs(player.x - (data.x ?? player.x))
+        const dy = Math.abs(player.y - (data.y ?? player.y))
+        if (dx > 0.5 || dy > 0.5) {
+          this.movedThisTurn.add(client.sessionId)
+        }
         player.x = data.x
         player.y = data.y
         player.velocityX = data.velocityX || 0
@@ -72,7 +81,7 @@ export class GameRoom extends Room<GameRoomSchema> {
 
     // Spawn positions
     const playerIndex = this.state.players.size
-    player.x = playerIndex === 0 ? 200 : 1080
+    player.x = playerIndex === 0 ? 800 : 1760
     player.y = 520
     player.characterId = "warrior"
     player.facingLeft = playerIndex === 1
@@ -112,6 +121,7 @@ export class GameRoom extends Room<GameRoomSchema> {
 
   private startTurn() {
     this.hasThrownThisTurn = false
+    this.movedThisTurn.clear()
     const playerIds = Array.from(this.state.players.keys())
     const currentPlayer = this.state.players.get(playerIds[this.state.currentTurn])
 
@@ -137,6 +147,23 @@ export class GameRoom extends Room<GameRoomSchema> {
     }, 1000)
 
     const currentPlayerId = playerIds[this.state.currentTurn]
+
+    // Attacker cannot dodge
+    const attacker = this.state.players.get(currentPlayerId)
+    if (attacker) {
+      attacker.energy = 0
+    }
+
+    // Defender energy = max possible (based on HP) minus times already defended
+    const defenderIdx = this.state.currentTurn === 0 ? 1 : 0
+    const defender = this.state.players.get(playerIds[defenderIdx])
+    if (defender) {
+      const missingHp = defender.maxHp - defender.hp
+      const maxEnergy = ENERGY.base + Math.floor(missingHp / 30) * ENERGY.bonusPerMissing30Hp
+      const used = this.timesDefended.get(defender.id) || 0
+      defender.energy = Math.max(0, maxEnergy - used)
+    }
+
     this.broadcast("turnStart", { playerId: currentPlayerId, timeLeft: turnTime })
   }
 
@@ -174,13 +201,21 @@ const velocityY = Math.sin(radians) * power * THROW_SPEED
 
     const interval = setInterval(() => {
       // Update position
-      projectile.x += (projectile.velocityX / 60) // 60fps
+      projectile.x += (projectile.velocityX / 60)
       projectile.y += (projectile.velocityY / 60)
       projectile.velocityY += GRAVITY / 60
       projectile.velocityX += this.state.windForce / 60
 
       // Check collision with ground
       if (projectile.y >= GROUND_Y) {
+        this.handleProjectileHit(projectile, null)
+        clearInterval(interval)
+        this.state.projectiles.delete(projectileId)
+        return
+      }
+
+      // Out of bounds check
+      if (projectile.x < -200 || projectile.x > WORLD_WIDTH + 200 || projectile.y < -500) {
         this.handleProjectileHit(projectile, null)
         clearInterval(interval)
         this.state.projectiles.delete(projectileId)
@@ -381,6 +416,15 @@ const velocityY = Math.sin(radians) * power * THROW_SPEED
   private nextTurn() {
     if (this.turnTimer) clearInterval(this.turnTimer)
 
+    // Track if defending player actually moved (dodged)
+    const playerIds = Array.from(this.state.players.keys())
+    const defenderIdx = (this.state.currentTurn + 1) % 2
+    const defender = this.state.players.get(playerIds[defenderIdx])
+    if (defender && defender.isAlive && this.movedThisTurn.has(defender.id)) {
+      const current = this.timesDefended.get(defender.id) || 0
+      this.timesDefended.set(defender.id, current + 1)
+    }
+
     // Decrement status durations
     this.state.players.forEach(player => {
       if (player.statusDuration > 0) {
@@ -446,6 +490,7 @@ const velocityY = Math.sin(radians) * power * THROW_SPEED
       player.animState = "idle"
     })
     this.comboCount.clear()
+    this.timesDefended.clear()
     this.state.currentTurn = Math.random() > 0.5 ? 1 : 0
     this.state.turnNumber = 0
     this.state.phase = "playing"

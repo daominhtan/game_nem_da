@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import NetworkManager from '../network/NetworkManager';
-import { SKILL_DATA } from '@nem-da/shared/constants';
+import { SKILL_DATA, ENERGY } from '@nem-da/shared/constants';
 import { getCharacterById } from '../config/characters';
 const SKILL_COLORS = {
     rock: 0x9e9e9e,
@@ -28,6 +28,10 @@ export default class UIScene extends Phaser.Scene {
         this.clearSkillBar();
         this.barCreated = false;
         this.skillIcons = [];
+        this.p1EnergyPips?.destroy();
+        this.p2EnergyPips?.destroy();
+        this.p1EnergyLabel?.destroy();
+        this.p2EnergyLabel?.destroy();
     }
     create() {
         this.cleanup();
@@ -47,6 +51,16 @@ export default class UIScene extends Phaser.Scene {
         this.p2HpBar = this.add.graphics().setDepth(1000);
         this.add.text(width - 20, 20, 'Player 2', {
             fontSize: '18px', color: '#F44336'
+        }).setOrigin(1, 0).setDepth(1000);
+        this.p1EnergyPips = this.add.graphics().setDepth(1000);
+        this.p2EnergyPips = this.add.graphics().setDepth(1000);
+        this.p1EnergyLabel = this.add.text(20, 62, '', {
+            fontSize: '12px', color: '#ffeb3b',
+            stroke: '#000', strokeThickness: 2
+        }).setDepth(1000);
+        this.p2EnergyLabel = this.add.text(width - 20, 62, '', {
+            fontSize: '12px', color: '#ffeb3b',
+            stroke: '#000', strokeThickness: 2
         }).setOrigin(1, 0).setDepth(1000);
         // Skill bar title - shown above skill icons
         this.titleLabel = this.add.text(width / 2, height - 110, 'CHON DAN (phim 1-4):', {
@@ -256,6 +270,7 @@ export default class UIScene extends Phaser.Scene {
         }
         this.updateSkillCooldowns();
         this.updateHPBars();
+        this.updateEnergyBars();
         this.updateRoundIndicators(state);
     }
     updateSkillCooldowns() {
@@ -325,6 +340,36 @@ export default class UIScene extends Phaser.Scene {
             this.p2HpBar.fillRect(this.cameras.main.width - 220, 45, 200, 15);
             this.p2HpBar.fillStyle(this.getHPColor(p2HpPercent), 1);
             this.p2HpBar.fillRect(this.cameras.main.width - 220 + (200 * (1 - p2HpPercent)), 45, 200 * p2HpPercent, 15);
+        }
+    }
+    updateEnergyBars() {
+        const room = this.network.getRoom();
+        if (!room || !room.state)
+            return;
+        const players = Array.from(room.state.players.values());
+        if (players.length < 2)
+            return;
+        const drawPips = (g, x, y, energy, maxEnergy) => {
+            g.clear();
+            for (let i = 0; i < maxEnergy; i++) {
+                const px = x + i * 14;
+                g.fillStyle(i < energy ? 0xffeb3b : 0x444444, i < energy ? 1 : 0.5);
+                g.fillCircle(px, y, 5);
+                g.lineStyle(1, 0xffffff, 0.3);
+                g.strokeCircle(px, y, 5);
+            }
+        };
+        const p1 = players[0];
+        const p2 = players[1];
+        const maxEnergy = ENERGY.maxDisplay; // display capacity
+        if (this.p1EnergyPips && this.p1EnergyLabel) {
+            drawPips(this.p1EnergyPips, 20, 68, p1.energy, maxEnergy);
+            this.p1EnergyLabel.setText(`NL: ${p1.energy}`);
+        }
+        if (this.p2EnergyPips && this.p2EnergyLabel) {
+            const w = this.cameras.main.width;
+            drawPips(this.p2EnergyPips, w - 20, 68, p2.energy, maxEnergy);
+            this.p2EnergyLabel.setText(`NL: ${p2.energy}`);
         }
     }
     getHPColor(percent) {

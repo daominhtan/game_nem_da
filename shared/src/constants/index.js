@@ -1,6 +1,7 @@
 export const GAME_CONFIG = {
     width: 1280,
     height: 720,
+    worldWidth: 2560,
     gravity: 0.3,
     groundLevel: 580,
     maxPlayers: 2,
@@ -9,13 +10,28 @@ export const GAME_CONFIG = {
     maxRounds: 3
 };
 export const PHYSICS = {
-    gravity: 980, // pixels/s² for server
+    gravity: 980,
     windForce: 0,
     maxPower: 1.0,
     minAngle: -90,
     maxAngle: 0,
     groundY: 580,
-    throwSpeed: 1500 // base speed multiplier for throw velocity
+    throwSpeed: 1500
+};
+export const PLATFORMS = {
+    mainGround: { x: 1280, y: 580, width: 2560, height: 40 },
+    left: { x: 500, y: 500, width: 200, height: 20 },
+    center: { x: 1280, y: 450, width: 240, height: 20 },
+    right: { x: 2060, y: 500, width: 200, height: 20 }
+};
+export const SPAWN_POSITIONS = {
+    player1: { x: 800, y: 520 },
+    player2: { x: 1760, y: 520 }
+};
+export const ENERGY = {
+    base: 2,
+    bonusPerMissing30Hp: 1,
+    maxDisplay: 8
 };
 export const MSG = {
     MOVE: 'move',

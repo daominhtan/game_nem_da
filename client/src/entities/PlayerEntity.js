@@ -26,7 +26,7 @@ export default class PlayerEntity {
         this.hpBarGreen = scene.add.graphics().setDepth(100);
         this.hpBarYellow = scene.add.graphics().setDepth(99);
         this.debugRect = scene.add.rectangle(state.x, state.y, 64, 80, 0xff0000, 0.3).setDepth(49);
-        const initialFacingLeft = (state.x || 0) > 640;
+        const initialFacingLeft = (state.x || 0) > 1280;
         this.sprite.setFlipX(initialFacingLeft);
         this.playerState.facingLeft = initialFacingLeft;
         this.updateHPBar();

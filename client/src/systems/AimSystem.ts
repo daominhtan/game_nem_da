@@ -5,10 +5,12 @@ export default class AimSystem {
   private scene: Phaser.Scene
   private graphics?: Phaser.GameObjects.Graphics
   private isAimingFlag: boolean = false
-  private startX: number = 0
-  private startY: number = 0
-  private currentX: number = 0
-  private currentY: number = 0
+  private screenStartX: number = 0
+  private screenStartY: number = 0
+  private worldStartX: number = 0
+  private worldStartY: number = 0
+  private currentScreenX: number = 0
+  private currentScreenY: number = 0
   private dragDistance: number = 0
   private angle: number = -45
   private power: number = 0.5
@@ -24,41 +26,40 @@ export default class AimSystem {
     this.windForce = force
   }
 
-  startAim(x: number, y: number, facingLeft: boolean) {
+  startAim(worldX: number, worldY: number, screenX: number, screenY: number, facingLeft: boolean) {
     if (!this.graphics) {
       this.graphics = this.scene.add.graphics()
       this.graphics.setDepth(1000)
     }
     this.isAimingFlag = true
-    this.startX = x
-    this.startY = y
-    this.currentX = x
-    this.currentY = y
+    this.worldStartX = worldX
+    this.worldStartY = worldY
+    this.screenStartX = screenX
+    this.screenStartY = screenY
+    this.currentScreenX = screenX
+    this.currentScreenY = screenY
     this.facingLeft = facingLeft
   }
 
-  updateAim(x: number, y: number) {
+  updateAim(screenX: number, screenY: number) {
     if (!this.isAimingFlag) return
 
-    this.currentX = x
-    this.currentY = y
+    this.currentScreenX = screenX
+    this.currentScreenY = screenY
 
-    const dx = x - this.startX
-    const dy = y - this.startY
+    const dx = screenX - this.screenStartX
+    const dy = screenY - this.screenStartY
 
     this.angle = Phaser.Math.RadToDeg(Math.atan2(dy, dx))
 
-    // Clamp based on facing direction
     if (this.facingLeft) {
-      // P2 throws left: angles from -180 (left) to -90 (up)
       if (this.angle > -90 && this.angle <= 0) {
         this.angle = -90
       } else if (this.angle > 0) {
-        this.angle = this.angle - 360 // Convert 0..90 to -360..-270, then clamp
+        this.angle = this.angle - 360
       }
       this.angle = Phaser.Math.Clamp(this.angle, -180, -90)
     } else {
-      // P1 throws right: angles from -90 (up) to 0 (right)
       this.angle = Phaser.Math.Clamp(this.angle, -90, 0)
     }
 
@@ -94,17 +95,15 @@ export default class AimSystem {
     const radians = Phaser.Math.DegToRad(this.angle)
     let vx = Math.cos(radians) * this.power * PHYSICS.throwSpeed
     let vy = Math.sin(radians) * this.power * PHYSICS.throwSpeed
-    let px = this.startX
-    let py = this.startY
+    let px = this.worldStartX
+    let py = this.worldStartY
 
-    // Draw aim direction line
     this.graphics.lineStyle(3, 0xffff00, 0.8)
     this.graphics.beginPath()
     this.graphics.moveTo(px, py)
     this.graphics.lineTo(px + vx / 10, py + vy / 10)
     this.graphics.strokePath()
 
-    // Draw trajectory dots
     for (let i = 0; i < 30; i++) {
       vx += this.windForce / 60
       vy += PHYSICS.gravity / 60
@@ -126,8 +125,8 @@ export default class AimSystem {
 
     const barWidth = 100
     const barHeight = 10
-    const x = this.startX + (this.facingLeft ? -150 : 50)
-    const y = this.startY - 80
+    const x = this.worldStartX + (this.facingLeft ? -150 : 50)
+    const y = this.worldStartY - 80
 
     this.graphics.fillStyle(0x000000, 0.6)
     this.graphics.fillRect(x, y, barWidth, barHeight)

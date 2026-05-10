@@ -161,7 +161,7 @@ export default class ProjectileSystem {
                 const proj = this.projectiles.get(projectileId);
                 if (proj) {
                     proj.rotation += 0.3;
-                    if (proj.y > GAME_CONFIG.groundLevel + 50 || proj.x < -100 || proj.x > 2600) {
+                    if (proj.y > GAME_CONFIG.groundLevel + 50 || proj.x < -100 || proj.x > GAME_CONFIG.worldWidth + 100) {
                         const type = proj.getData('type') || 'rock';
                         this.spawnExplosion(proj.x, Math.min(proj.y, GAME_CONFIG.groundLevel), type);
                         this.destroyProjectile(projectileId);

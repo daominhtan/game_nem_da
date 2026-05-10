@@ -11,6 +11,7 @@ export default class BootScene extends Phaser.Scene {
         this.createFxTextures();
         this.createBackgroundTextures();
         this.createGroundTexture();
+        this.createParallaxTextures();
         // Init sound manager (context starts suspended until user gesture)
         SoundManager.getInstance();
         this.time.delayedCall(100, () => {
@@ -212,6 +213,124 @@ export default class BootScene extends Phaser.Scene {
             ctx.fill();
         }
         this.textures.addCanvas('ground', canvas);
+    }
+    createParallaxTextures() {
+        // Far layer: sky gradient + distant mountains (512x720, tileable)
+        const farCanvas = document.createElement('canvas');
+        farCanvas.width = 512;
+        farCanvas.height = 720;
+        const farCtx = farCanvas.getContext('2d');
+        if (farCtx) {
+            const grad = farCtx.createLinearGradient(0, 0, 0, 720);
+            grad.addColorStop(0, '#4a90d9');
+            grad.addColorStop(0.5, '#7bb8e8');
+            grad.addColorStop(0.75, '#b5d9a8');
+            grad.addColorStop(1, '#5a8f4a');
+            farCtx.fillStyle = grad;
+            farCtx.fillRect(0, 0, 512, 720);
+            // Distant mountains
+            farCtx.fillStyle = '#6b8f6b';
+            for (let i = 0; i < 6; i++) {
+                const mx = i * 85 + 10;
+                const mh = 80 + Math.random() * 120;
+                farCtx.beginPath();
+                farCtx.moveTo(mx - 50, 500);
+                farCtx.lineTo(mx, 500 - mh);
+                farCtx.lineTo(mx + 50, 500);
+                farCtx.closePath();
+                farCtx.fill();
+            }
+            // Clouds
+            farCtx.fillStyle = 'rgba(255,255,255,0.6)';
+            for (let i = 0; i < 4; i++) {
+                const cx = 40 + i * 130;
+                const cy = 80 + Math.random() * 100;
+                farCtx.beginPath();
+                farCtx.arc(cx, cy, 30 + Math.random() * 20, 0, Math.PI * 2);
+                farCtx.arc(cx + 30, cy - 10, 25 + Math.random() * 15, 0, Math.PI * 2);
+                farCtx.arc(cx + 60, cy, 28 + Math.random() * 18, 0, Math.PI * 2);
+                farCtx.fill();
+            }
+        }
+        this.textures.addCanvas('bg_far', farCanvas);
+        // Mid layer: hills + trees (512x720, tileable)
+        const midCanvas = document.createElement('canvas');
+        midCanvas.width = 512;
+        midCanvas.height = 720;
+        const midCtx = midCanvas.getContext('2d');
+        if (midCtx) {
+            midCtx.clearRect(0, 0, 512, 720);
+            // Rolling hills
+            const hillGrad = midCtx.createLinearGradient(0, 400, 0, 580);
+            hillGrad.addColorStop(0, '#6ba86b');
+            hillGrad.addColorStop(1, '#3d7a3d');
+            midCtx.fillStyle = hillGrad;
+            midCtx.beginPath();
+            midCtx.moveTo(0, 580);
+            for (let x = 0; x <= 512; x += 10) {
+                midCtx.lineTo(x, 500 + Math.sin(x * 0.02) * 60 + Math.sin(x * 0.05) * 25);
+            }
+            midCtx.lineTo(512, 580);
+            midCtx.closePath();
+            midCtx.fill();
+            // Trees
+            for (let i = 0; i < 8; i++) {
+                const tx = 20 + i * 65 + Math.random() * 20;
+                const ty = 460 + Math.sin(tx * 0.03) * 40;
+                midCtx.fillStyle = '#5d4037';
+                midCtx.fillRect(tx - 3, ty, 6, 30);
+                midCtx.fillStyle = '#388e3c';
+                midCtx.beginPath();
+                midCtx.arc(tx, ty - 10, 18 + Math.random() * 10, 0, Math.PI * 2);
+                midCtx.fill();
+                midCtx.fillStyle = '#43a047';
+                midCtx.beginPath();
+                midCtx.arc(tx + 8, ty - 18, 12 + Math.random() * 6, 0, Math.PI * 2);
+                midCtx.fill();
+            }
+        }
+        this.textures.addCanvas('bg_mid', midCanvas);
+        // Near layer: bushes + foreground (512x720, tileable)
+        const nearCanvas = document.createElement('canvas');
+        nearCanvas.width = 512;
+        nearCanvas.height = 720;
+        const nearCtx = nearCanvas.getContext('2d');
+        if (nearCtx) {
+            nearCtx.clearRect(0, 0, 512, 720);
+            // Foreground bushes
+            for (let i = 0; i < 12; i++) {
+                const bx = 20 + i * 45 + Math.random() * 20;
+                const by = 560 + Math.random() * 20;
+                const bw = 25 + Math.random() * 20;
+                const bh = 15 + Math.random() * 15;
+                nearCtx.fillStyle = `hsl(${110 + Math.random() * 30}, 50%, ${30 + Math.random() * 20}%)`;
+                nearCtx.beginPath();
+                nearCtx.ellipse(bx, by, bw, bh, 0, 0, Math.PI * 2);
+                nearCtx.fill();
+            }
+            // Small flowers
+            for (let i = 0; i < 15; i++) {
+                const fx = Math.random() * 512;
+                const fy = 550 + Math.random() * 40;
+                const colors = ['#ffeb3b', '#ff7043', '#ce93d8', '#81d4fa'];
+                nearCtx.fillStyle = colors[Math.floor(Math.random() * colors.length)];
+                nearCtx.beginPath();
+                nearCtx.arc(fx, fy, 2 + Math.random() * 2, 0, Math.PI * 2);
+                nearCtx.fill();
+            }
+            // Tall grass blades
+            nearCtx.strokeStyle = '#4caf50';
+            nearCtx.lineWidth = 2;
+            for (let i = 0; i < 30; i++) {
+                const gx = Math.random() * 512;
+                const gh = 20 + Math.random() * 40;
+                nearCtx.beginPath();
+                nearCtx.moveTo(gx, 580);
+                nearCtx.quadraticCurveTo(gx + Math.random() * 10 - 5, 580 - gh / 2, gx + Math.random() * 8 - 4, 580 - gh);
+                nearCtx.stroke();
+            }
+        }
+        this.textures.addCanvas('bg_near', nearCanvas);
     }
     createCircleTexture(key, color, size) {
         if (this.textures.exists(key))

@@ -50,7 +50,7 @@ export default class PlayerEntity {
 
     this.debugRect = scene.add.rectangle(state.x, state.y, 64, 80, 0xff0000, 0.3).setDepth(49)
 
-    const initialFacingLeft = (state.x || 0) > 640
+    const initialFacingLeft = (state.x || 0) > 1280
     this.sprite.setFlipX(initialFacingLeft)
     this.playerState.facingLeft = initialFacingLeft
 

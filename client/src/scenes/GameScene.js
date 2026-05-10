@@ -4,7 +4,7 @@ import PlayerEntity from '../entities/PlayerEntity';
 import AimSystem from '../systems/AimSystem';
 import ProjectileSystem from '../systems/ProjectileSystem';
 import { SoundManager } from '../systems/SoundManager';
-import { GAME_CONFIG, SKILL_DATA } from '@nem-da/shared/constants';
+import { GAME_CONFIG, SKILL_DATA, PLATFORMS } from '@nem-da/shared/constants';
 import { getCharacterById } from '../config/characters';
 export default class GameScene extends Phaser.Scene {
     constructor() {
@@ -17,6 +17,13 @@ export default class GameScene extends Phaser.Scene {
         this.selectedSkill = 'rock';
         this.skillBarRects = [];
         this.skillBarCreated = false;
+        this.cloudSprites = [];
+        this.cameraTargetX = 640;
+        this.cameraTargetY = 360;
+        this.lastTurnNumber = -1;
+        this.defendStartX = 0;
+        this.defendRange = 150;
+        this.localEnergy = 0;
         this.network = NetworkManager.getInstance();
         this.players = new Map();
         this.aimSystem = new AimSystem(this);
@@ -31,19 +38,37 @@ export default class GameScene extends Phaser.Scene {
         this.hasThrownThisTurn = false;
         this.isMyTurn = false;
         this.phase = 'waiting';
+        this.cloudSprites = [];
+        this.localEnergy = 0;
+        this.lastTurnNumber = -1;
+        this.defendStartX = 0;
+        this.moveState = { left: false, right: false, up: false };
+        this.destroyEnergyDisplay();
     }
     create() {
         this.cleanup();
         this.events.on('shutdown', this.cleanup, this);
         this.aimSystem = new AimSystem(this);
         this.projectileSystem = new ProjectileSystem(this);
-        const { width, height } = this.cameras.main;
-        // Background
-        this.add.image(width / 2, 360, 'bg_game');
-        // Ground visual (tileSprite for display only)
-        this.add.tileSprite(width / 2, GAME_CONFIG.groundLevel + 100, width, 200, 'ground').setDepth(10);
-        // Set world bounds so players can't fall below ground
-        this.physics.world.setBounds(0, 0, width, GAME_CONFIG.groundLevel);
+        const { height } = this.cameras.main;
+        const viewW = GAME_CONFIG.width;
+        const worldW = GAME_CONFIG.worldWidth;
+        // Setup world and camera
+        this.physics.world.setBounds(0, 0, worldW, GAME_CONFIG.groundLevel);
+        this.cameras.main.setBounds(0, 0, worldW, GAME_CONFIG.height);
+        this.cameras.main.setScroll(0, 0);
+        // Parallax backgrounds (3 layers)
+        this.farBg = this.add.tileSprite(0, 0, worldW, height, 'bg_far').setOrigin(0, 0).setDepth(-10);
+        this.midBg = this.add.tileSprite(0, 0, worldW, height, 'bg_mid').setOrigin(0, 0).setDepth(-5);
+        this.nearBg = this.add.tileSprite(0, 0, worldW, height, 'bg_near').setOrigin(0, 0).setDepth(0);
+        // Ground visual (full world width)
+        this.groundTile = this.add.tileSprite(worldW / 2, GAME_CONFIG.groundLevel + 100, worldW, 200, 'ground').setDepth(10);
+        // Floating clouds (3-5 clouds)
+        this.createClouds();
+        // Ambient particles
+        this.createAmbientParticles();
+        // Floating platforms
+        this.createPlatforms();
         // Keyboard
         this.setupKeyboardInput();
         // Network
@@ -65,6 +90,10 @@ export default class GameScene extends Phaser.Scene {
             callbackScope: this,
             loop: true
         });
+        // Set up collision between local player and platforms
+        this.time.delayedCall(100, () => {
+            this.setupCollisions();
+        });
         // Launch UI
         this.scene.launch('UIScene');
         // Create skill bar after scene is ready
@@ -75,6 +104,137 @@ export default class GameScene extends Phaser.Scene {
         this.time.delayedCall(500, () => {
             this.sfx.startBGM();
         });
+    }
+    createClouds() {
+        const cloudCount = 3 + Math.floor(Math.random() * 3);
+        for (let i = 0; i < cloudCount; i++) {
+            const cloud = this.add.image(Math.random() * GAME_CONFIG.worldWidth, 30 + Math.random() * 100, 'fx_spark').setAlpha(0.3 + Math.random() * 0.3)
+                .setScale(3 + Math.random() * 4)
+                .setDepth(-8)
+                .setTint(0xffffff);
+            cloud.setData('speed', 3 + Math.random() * 5);
+            cloud.setData('drift', Math.random() > 0.5 ? 1 : -1);
+            this.cloudSprites.push(cloud);
+        }
+    }
+    createAmbientParticles() {
+        // Floating dust particles
+        this.dustEmitter = this.add.particles(0, 0, 'fx_dust', {
+            x: { min: 0, max: GAME_CONFIG.worldWidth },
+            y: { min: 300, max: 550 },
+            speed: { min: 2, max: 8 },
+            angle: { min: 0, max: 360 },
+            scale: { start: 0.15, end: 0 },
+            alpha: { start: 0.3, end: 0 },
+            lifespan: { min: 3000, max: 6000 },
+            quantity: 2,
+            frequency: 500,
+            tint: [0xcccccc, 0xddddbb],
+            blendMode: 'ADD'
+        }).setDepth(-3);
+        // Leaf particles (fall every 3-5s)
+        this.leafEmitter = this.add.particles(0, 0, 'fx_spark', {
+            x: { min: 0, max: GAME_CONFIG.worldWidth },
+            y: -10,
+            speedX: { min: -15, max: 15 },
+            speedY: { min: 20, max: 50 },
+            scale: { start: 0.3, end: 0.1 },
+            alpha: { start: 0.7, end: 0 },
+            lifespan: { min: 4000, max: 8000 },
+            quantity: 1,
+            frequency: 3500,
+            tint: [0x66bb6a, 0x81c784, 0xa5d6a7, 0xffcc02],
+            rotate: { min: 0, max: 360 },
+            gravityY: 20
+        }).setDepth(5);
+    }
+    createPlatforms() {
+        this.platformGroup = this.physics.add.staticGroup();
+        const addPlatform = (x, y, w, _h) => {
+            const plat = this.platformGroup.create(x, y, undefined);
+            if (!plat)
+                return;
+            plat.setVisible(false);
+            const body = plat.body;
+            body.setSize(w, _h);
+            body.setOffset(-w / 2, -_h / 2);
+            body.updateFromGameObject();
+            // Visual platform
+            this.add.graphics()
+                .fillStyle(0x5d4037, 1)
+                .fillRect(x - w / 2, y - _h / 2, w, _h)
+                .lineStyle(2, 0x4caf50, 0.8)
+                .strokeRect(x - w / 2, y - _h / 2, w, _h)
+                .setDepth(8);
+            // Grass strip on top
+            this.add.graphics()
+                .fillStyle(0x66bb6a, 1)
+                .fillRect(x - w / 2, y - _h / 2, w, 6)
+                .setDepth(9);
+        };
+        // Main ground
+        addPlatform(PLATFORMS.mainGround.x, PLATFORMS.mainGround.y, PLATFORMS.mainGround.width, PLATFORMS.mainGround.height);
+        // Floating platforms
+        addPlatform(PLATFORMS.left.x, PLATFORMS.left.y, PLATFORMS.left.width, PLATFORMS.left.height);
+        addPlatform(PLATFORMS.center.x, PLATFORMS.center.y, PLATFORMS.center.width, PLATFORMS.center.height);
+        addPlatform(PLATFORMS.right.x, PLATFORMS.right.y, PLATFORMS.right.width, PLATFORMS.right.height);
+    }
+    updateCamera() {
+        let targetX = GAME_CONFIG.width / 2;
+        let targetY = GAME_CONFIG.height / 2;
+        const alivePlayers = [];
+        this.players.forEach(p => { if (p.isAlive())
+            alivePlayers.push(p); });
+        if (alivePlayers.length > 0) {
+            const avgX = alivePlayers.reduce((sum, p) => sum + p.x, 0) / alivePlayers.length;
+            const avgY = alivePlayers.reduce((sum, p) => sum + p.y, 0) / alivePlayers.length;
+            targetX = Phaser.Math.Clamp(avgX, GAME_CONFIG.width / 2, GAME_CONFIG.worldWidth - GAME_CONFIG.width / 2);
+            targetY = Phaser.Math.Clamp(avgY, GAME_CONFIG.height / 2, GAME_CONFIG.groundLevel);
+        }
+        this.cameraTargetX += (targetX - this.cameraTargetX) * 0.08;
+        this.cameraTargetY += (targetY - this.cameraTargetY) * 0.08;
+        const cam = this.cameras.main;
+        cam.scrollX = this.cameraTargetX - GAME_CONFIG.width / 2;
+        cam.scrollY = this.cameraTargetY - GAME_CONFIG.height / 2;
+        cam.scrollX = Phaser.Math.Clamp(cam.scrollX, 0, GAME_CONFIG.worldWidth - GAME_CONFIG.width);
+        cam.scrollY = Phaser.Math.Clamp(cam.scrollY, 0, GAME_CONFIG.groundLevel - GAME_CONFIG.height);
+    }
+    updateParallax() {
+        const cam = this.cameras.main;
+        if (this.farBg)
+            this.farBg.tilePositionX = cam.scrollX * 0.05;
+        if (this.midBg)
+            this.midBg.tilePositionX = cam.scrollX * 0.2;
+        if (this.nearBg)
+            this.nearBg.tilePositionX = cam.scrollX * 0.5;
+        if (this.groundTile)
+            this.groundTile.tilePositionX = cam.scrollX;
+    }
+    updateClouds() {
+        const cam = this.cameras.main;
+        this.cloudSprites.forEach(cloud => {
+            const speed = cloud.getData('speed');
+            const drift = cloud.getData('drift');
+            cloud.x += speed * drift;
+            if (cloud.x < cam.scrollX - 200)
+                cloud.x = cam.scrollX + GAME_CONFIG.width + 200;
+            if (cloud.x > cam.scrollX + GAME_CONFIG.width + 200)
+                cloud.x = cam.scrollX - 200;
+        });
+    }
+    updateWindParticles() {
+    }
+    setupCollisions() {
+        const room = this.network.getRoom();
+        if (!room)
+            return;
+        const myPlayer = this.players.get(room.sessionId);
+        if (!myPlayer || !this.platformGroup)
+            return;
+        this.physics.add.collider(myPlayer.sprite, this.platformGroup);
+        const body = myPlayer.getBody();
+        if (body)
+            body.setGravityY(800);
     }
     createSkillBar() {
         if (this.skillBarCreated)
@@ -100,11 +260,10 @@ export default class GameScene extends Phaser.Scene {
         const totalWidth = skills.length * spacing;
         const startX = (width - totalWidth) / 2 + iconSize / 2;
         this.selectedSkill = skills[0] || 'rock';
-        // Title
         this.add.text(width / 2, barY - 30, 'CHON DAN (phim 1-4):', {
             fontSize: '16px', color: '#ffeb3b',
             stroke: '#000', strokeThickness: 4
-        }).setOrigin(0.5).setDepth(200);
+        }).setOrigin(0.5).setDepth(200).setScrollFactor(0);
         const barColors = {
             rock: 0x9e9e9e, big_rock: 0x757575, bomb: 0xd32f2f, soap: 0x42a5f5,
             pillow: 0xfff176, fireball: 0xff5722, wind_blade: 0x80deea,
@@ -120,21 +279,22 @@ export default class GameScene extends Phaser.Scene {
             const bg = this.add.rectangle(x, barY, iconSize, iconSize, color, 0.9)
                 .setStrokeStyle(2, 0xffffff)
                 .setInteractive({ useHandCursor: true })
-                .setDepth(200);
+                .setDepth(200)
+                .setScrollFactor(0);
             bg.setData('skillId', skillId);
             this.add.text(x, barY - 8, skillData.name.substring(0, 8), {
                 fontSize: '12px', color: '#fff', fontStyle: 'bold',
                 stroke: '#000', strokeThickness: 3
-            }).setOrigin(0.5).setDepth(201);
+            }).setOrigin(0.5).setDepth(201).setScrollFactor(0);
             const dmg = skillData.damage > 0 ? `${skillData.damage}` : '--';
             this.add.text(x, barY + 11, dmg, {
                 fontSize: '9px', color: '#ffccbc',
                 stroke: '#000', strokeThickness: 2
-            }).setOrigin(0.5).setDepth(201);
+            }).setOrigin(0.5).setDepth(201).setScrollFactor(0);
             this.add.text(x, barY + iconSize / 2 - 12, `[${index + 1}]`, {
                 fontSize: '12px', color: '#ffeb3b', fontStyle: 'bold',
                 stroke: '#000', strokeThickness: 3
-            }).setOrigin(0.5).setDepth(201);
+            }).setOrigin(0.5).setDepth(201).setScrollFactor(0);
             bg.on('pointerdown', () => {
                 this.selectedSkill = skillId;
                 this.highlightSkill();
@@ -157,9 +317,26 @@ export default class GameScene extends Phaser.Scene {
         if (!room || !room.state)
             return;
         const state = room.state;
+        const prevPhase = this.phase;
         this.phase = state.phase;
         const playerIds = Array.from(state.players.keys());
         this.isMyTurn = playerIds[state.currentTurn] === this.myPlayerId;
+        const myData = state.players.get(this.myPlayerId);
+        const serverEnergy = myData ? myData.energy : -1;
+        const energyBefore = this.localEnergy;
+        const willSync = state.turnNumber !== this.lastTurnNumber;
+        // Reset throw flag when turn changes (safety net in case turnStart event was missed)
+        if (state.turnNumber !== this.lastTurnNumber) {
+            this.lastTurnNumber = state.turnNumber;
+            this.hasThrownThisTurn = false;
+            // Sync energy from server state (state patch has already been applied - reliable)
+            if (myData) {
+                this.localEnergy = myData.energy || 0;
+            }
+        }
+        if (willSync || energyBefore !== this.localEnergy || prevPhase !== this.phase) {
+            console.log(`[ENERGY-SYNC] turn=${state.turnNumber} lastTurn=${this.lastTurnNumber} phase=${this.phase} isMyTurn=${this.isMyTurn} serverEnergy=${serverEnergy} local=${energyBefore}->${this.localEnergy} sync=${willSync}`);
+        }
         this.aimSystem.setWindForce(state.windForce || 0);
         state.players.forEach((player, key) => {
             let entity = this.players.get(key);
@@ -199,8 +376,12 @@ export default class GameScene extends Phaser.Scene {
             v: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.V)
         };
         const trackKey = (key, direction) => {
-            key.on('down', () => { this.moveState[direction] = true; });
-            key.on('up', () => { this.moveState[direction] = false; });
+            key.on('down', () => {
+                this.moveState[direction] = true;
+            });
+            key.on('up', () => {
+                this.moveState[direction] = false;
+            });
         };
         trackKey(this.cursors.left, 'left');
         trackKey(this.cursors.right, 'right');
@@ -238,13 +419,15 @@ export default class GameScene extends Phaser.Scene {
             });
         });
         // Mouse aiming
-        this.input.on('pointerdown', () => {
+        this.input.on('pointerdown', (pointer) => {
             if (!this.isMyTurn || this.phase !== 'playing' || this.hasThrownThisTurn)
                 return;
             const myPlayer = this.players.get(this.myPlayerId);
             if (!myPlayer || !myPlayer.isAlive())
                 return;
-            this.aimSystem.startAim(myPlayer.x, myPlayer.y, myPlayer.flipX);
+            const screenX = myPlayer.x - this.cameras.main.scrollX;
+            const screenY = myPlayer.y - this.cameras.main.scrollY;
+            this.aimSystem.startAim(myPlayer.x, myPlayer.y, screenX, screenY, myPlayer.flipX);
         });
         this.input.on('pointermove', (pointer) => {
             if (this.aimSystem.isAiming()) {
@@ -288,6 +471,11 @@ export default class GameScene extends Phaser.Scene {
                 this.showTurnIndicator('LƯỢT CỦA BẠN!');
                 this.sfx.playTurnStart();
             }
+            else {
+                const myPlayer = this.players.get(this.myPlayerId);
+                if (myPlayer)
+                    this.defendStartX = myPlayer.x;
+            }
         });
         this.network.on('throw', (data) => {
             const room = this.network.getRoom();
@@ -320,7 +508,7 @@ export default class GameScene extends Phaser.Scene {
                 this.time.delayedCall(300, () => { this.time.timeScale = 1.0; });
             }
             if (isBomb) {
-                const flash = this.add.rectangle(this.cameras.main.width / 2, this.cameras.main.height / 2, this.cameras.main.width, this.cameras.main.height, 0xffffff, 0.3).setDepth(999);
+                const flash = this.add.rectangle(this.cameras.main.width / 2, this.cameras.main.height / 2, this.cameras.main.width, this.cameras.main.height, 0xffffff, 0.3).setDepth(999).setScrollFactor(0);
                 this.tweens.add({ targets: flash, alpha: 0, duration: 200, onComplete: () => flash.destroy() });
             }
             const victim = this.players.get(data.targetId);
@@ -407,7 +595,7 @@ export default class GameScene extends Phaser.Scene {
     showTurnIndicator(text) {
         const textObj = this.add.text(this.cameras.main.width / 2, 100, text, {
             fontSize: '48px', color: '#fff', stroke: '#000', strokeThickness: 6
-        }).setOrigin(0.5);
+        }).setOrigin(0.5).setScrollFactor(0);
         this.tweens.add({
             targets: textObj, alpha: 0, y: 80, duration: 1500,
             onComplete: () => textObj.destroy()
@@ -430,7 +618,7 @@ export default class GameScene extends Phaser.Scene {
     showText(text, color = 0xffffff) {
         const textObj = this.add.text(this.cameras.main.width / 2, this.cameras.main.height / 2, text, {
             fontSize: '64px', color: `#${color.toString(16).padStart(6, '0')}`, stroke: '#000', strokeThickness: 8
-        }).setOrigin(0.5);
+        }).setOrigin(0.5).setScrollFactor(0);
         this.tweens.add({
             targets: textObj, alpha: 0, duration: 2000, onComplete: () => textObj.destroy()
         });
@@ -439,6 +627,11 @@ export default class GameScene extends Phaser.Scene {
         this.handleMovement();
         this.players.forEach(player => player.update(_time, delta));
         this.projectileSystem.update();
+        this.updateCamera();
+        this.updateParallax();
+        this.updateClouds();
+        this.updateWindParticles();
+        this.updateEnergyDisplay();
     }
     handleMovement() {
         const myPlayer = this.players.get(this.myPlayerId);
@@ -459,17 +652,44 @@ export default class GameScene extends Phaser.Scene {
         const baseSpeed = 180;
         const speed = status === 'slowed' ? baseSpeed * 0.5 : baseSpeed;
         let vx = 0;
-        if (this.moveState.left)
-            vx = -speed;
-        if (this.moveState.right)
-            vx = speed;
+        if (!this.isMyTurn && this.phase === 'playing' && this.localEnergy > 0) {
+            if (this.moveState.up && body.onFloor()) {
+                body.setVelocityY(-900);
+            }
+            if (this.moveState.left && myPlayer.x > this.defendStartX - this.defendRange) {
+                vx = -speed;
+            }
+            else if (this.moveState.right && myPlayer.x < this.defendStartX + this.defendRange) {
+                vx = speed;
+            }
+        }
         if (vx !== 0) {
             myPlayer.flipX = vx < 0;
         }
         body.setVelocityX(vx);
-        if ((this.cursors.up.isDown || this.wasd.up.isDown) && body.onFloor()) {
-            body.setVelocityY(-400);
-        }
         this.network.sendMove(myPlayer.x, myPlayer.y, body.velocity.x, body.velocity.y, myPlayer.flipX, vx !== 0 ? 'run' : 'idle');
+    }
+    updateEnergyDisplay() {
+        if (!this.energyText) {
+            this.energyText = this.add.text(this.cameras.main.width / 2, 140, '', {
+                fontSize: '22px', color: '#ffeb3b', fontStyle: 'bold',
+                stroke: '#000', strokeThickness: 4
+            }).setOrigin(0.5).setDepth(300).setScrollFactor(0);
+        }
+        if (!this.isMyTurn && this.phase === 'playing') {
+            const totalEnergy = this.localEnergy;
+            const pips = '●'.repeat(totalEnergy) + '○'.repeat(Math.max(0, 4 - totalEnergy));
+            this.energyText.setText(`LƯỢT NÉ: ${pips} (${totalEnergy})`);
+            this.energyText.setVisible(true);
+        }
+        else {
+            this.energyText.setVisible(false);
+        }
+    }
+    destroyEnergyDisplay() {
+        if (this.energyText) {
+            this.energyText.destroy();
+            this.energyText = undefined;
+        }
     }
 }

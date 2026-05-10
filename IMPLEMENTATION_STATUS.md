@@ -78,21 +78,21 @@
 - [x] Turn auto-shorten (5s) when defender stunned/sleeping
 
 #### Parallax Backgrounds
-- [ ] 3-layer parallax (far ×0.05, mid ×0.2, near ×0.5)
-- [ ] Cloud movement (3-5 đám mây trôi)
-- [ ] Floating dust particles (10-15 hạt bụi)
-- [ ] Leaf particles (rơi mỗi 3-5s)
+- [x] 3-layer parallax (far ×0.05, mid ×0.2, near ×0.5)
+- [x] Cloud movement (3-5 đám mây trôi)
+- [x] Floating dust particles (10-15 hạt bụi)
+- [x] Leaf particles (rơi mỗi 3-5s)
 - [ ] Wind-affected particles (bụi bay theo windForce)
 
 #### Platform Tilemaps
-- [ ] Tiled JSON map support (2560×720)
-- [ ] Layer 1: Background (cây, núi, mây)
-- [ ] Layer 2: Terrain collision (đất nền, platforms)
-- [ ] Layer 3: Decoration (cỏ, hoa, bướm)
-- [ ] Main ground (y=580, full width)
-- [ ] Floating platforms (giữa: y=450, trái: y=500, phải: y=500)
-- [ ] Camera bounds 0..2560, lerp follow cả 2 players
-- [ ] Spawn points (P1: x=200, P2: x=1080)
+- [x] Tiled JSON map support → procedural tilemap textures (2560×720)
+- [x] Layer 1: Background (cây, núi, mây) → parallax far + mid layers
+- [x] Layer 2: Terrain collision (đất nền, platforms)
+- [x] Layer 3: Decoration (cỏ, hoa, bướm) → parallax near layer
+- [x] Main ground (y=580, full width 2560px)
+- [x] Floating platforms (giữa: y=450, trái: y=500, phải: y=500)
+- [x] Camera bounds 0..2560, lerp follow cả 2 players
+- [x] Spawn points (P1: x=800, P2: x=1760)
 
 ---
 
