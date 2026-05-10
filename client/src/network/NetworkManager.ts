@@ -96,6 +96,14 @@ export default class NetworkManager {
     this.room?.send('emoji', { emoji })
   }
 
+  leaveRoom() {
+    if (this.room) {
+      this.room.leave()
+      this.room = undefined
+    }
+    this.messageHandlers.clear()
+  }
+
   getRoom() {
     return this.room
   }

@@ -1,7 +1,9 @@
 import Phaser from 'phaser';
+import NetworkManager from '../network/NetworkManager';
 export default class ResultScene extends Phaser.Scene {
     constructor() {
         super('ResultScene');
+        this.network = NetworkManager.getInstance();
     }
     create(data) {
         const { width, height } = this.cameras.main;
@@ -9,8 +11,8 @@ export default class ResultScene extends Phaser.Scene {
         this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.7);
         // Determine winner
         const winnerId = data?.winnerId;
-        const room = this.game.scene.getScenes(true).find(s => s.scene.key === 'GameScene');
-        const myPlayerId = room?.network?.getRoom()?.sessionId;
+        const room = this.network.getRoom();
+        const myPlayerId = room?.sessionId;
         const isWin = winnerId === myPlayerId;
         // Result text
         const resultText = isWin ? 'CHIẾN THẮNG!' : 'THẤT BẠI!';
@@ -36,9 +38,10 @@ export default class ResultScene extends Phaser.Scene {
             padding: { x: 20, y: 10 }
         }).setOrigin(0.5).setInteractive();
         playAgainBtn.on('pointerdown', () => {
+            this.network.leaveRoom();
             this.scene.stop('UIScene');
             this.scene.stop('GameScene');
-            this.scene.start('GameScene');
+            this.scene.start('MenuScene');
         });
         const menuBtn = this.add.text(width / 2, height / 2 + 160, 'VỀ MENU', {
             fontSize: '32px',
@@ -47,6 +50,7 @@ export default class ResultScene extends Phaser.Scene {
             padding: { x: 20, y: 10 }
         }).setOrigin(0.5).setInteractive();
         menuBtn.on('pointerdown', () => {
+            this.network.leaveRoom();
             this.scene.stop('UIScene');
             this.scene.stop('GameScene');
             this.scene.start('MenuScene');

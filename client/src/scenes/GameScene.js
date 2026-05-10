@@ -11,6 +11,7 @@ export default class GameScene extends Phaser.Scene {
         super('GameScene');
         this.myPlayerId = '';
         this.isMyTurn = false;
+        this.hasThrownThisTurn = false;
         this.phase = 'waiting';
         this.moveState = { left: false, right: false, up: false };
         this.selectedSkill = 'rock';
@@ -22,7 +23,20 @@ export default class GameScene extends Phaser.Scene {
         this.projectileSystem = new ProjectileSystem(this);
         this.sfx = SoundManager.getInstance();
     }
+    cleanup() {
+        this.players.clear();
+        this.skillBarRects = [];
+        this.skillBarCreated = false;
+        this.selectedSkill = 'rock';
+        this.hasThrownThisTurn = false;
+        this.isMyTurn = false;
+        this.phase = 'waiting';
+    }
     create() {
+        this.cleanup();
+        this.events.on('shutdown', this.cleanup, this);
+        this.aimSystem = new AimSystem(this);
+        this.projectileSystem = new ProjectileSystem(this);
         const { width, height } = this.cameras.main;
         // Background
         this.add.image(width / 2, 360, 'bg_game');
@@ -225,7 +239,7 @@ export default class GameScene extends Phaser.Scene {
         });
         // Mouse aiming
         this.input.on('pointerdown', () => {
-            if (!this.isMyTurn || this.phase !== 'playing')
+            if (!this.isMyTurn || this.phase !== 'playing' || this.hasThrownThisTurn)
                 return;
             const myPlayer = this.players.get(this.myPlayerId);
             if (!myPlayer || !myPlayer.isAlive())
@@ -238,7 +252,7 @@ export default class GameScene extends Phaser.Scene {
             }
         });
         this.input.on('pointerup', () => {
-            if (!this.isMyTurn || this.phase !== 'playing')
+            if (!this.isMyTurn || this.phase !== 'playing' || this.hasThrownThisTurn)
                 return;
             if (!this.aimSystem.isAiming())
                 return;
@@ -246,6 +260,7 @@ export default class GameScene extends Phaser.Scene {
             const { angle, power } = this.aimSystem.stopAim();
             if (power < 0.05)
                 return;
+            this.hasThrownThisTurn = true;
             console.log(`Throw: angle=${angle}, power=${power}, skill=${this.selectedSkill}, facingLeft=${myPlayer?.flipX}`);
             this.network.sendThrow(angle, power, this.selectedSkill);
             if (myPlayer) {
@@ -268,6 +283,7 @@ export default class GameScene extends Phaser.Scene {
         });
         this.network.on('turnStart', (data) => {
             this.isMyTurn = data.playerId === this.myPlayerId;
+            this.hasThrownThisTurn = false;
             if (this.isMyTurn) {
                 this.showTurnIndicator('LƯỢT CỦA BẠN!');
                 this.sfx.playTurnStart();

@@ -1,8 +1,12 @@
 import Phaser from 'phaser'
+import NetworkManager from '../network/NetworkManager'
 
 export default class ResultScene extends Phaser.Scene {
+  private network: NetworkManager
+
   constructor() {
     super('ResultScene')
+    this.network = NetworkManager.getInstance()
   }
 
   create(data: any) {
@@ -13,8 +17,8 @@ export default class ResultScene extends Phaser.Scene {
 
     // Determine winner
     const winnerId = data?.winnerId
-    const room = this.game.scene.getScenes(true).find(s => s.scene.key === 'GameScene') as any
-    const myPlayerId = room?.network?.getRoom()?.sessionId
+    const room = this.network.getRoom()
+    const myPlayerId = room?.sessionId
 
     const isWin = winnerId === myPlayerId
 
@@ -46,9 +50,10 @@ export default class ResultScene extends Phaser.Scene {
     }).setOrigin(0.5).setInteractive()
 
     playAgainBtn.on('pointerdown', () => {
+      this.network.leaveRoom()
       this.scene.stop('UIScene')
       this.scene.stop('GameScene')
-      this.scene.start('GameScene')
+      this.scene.start('MenuScene')
     })
 
     const menuBtn = this.add.text(width / 2, height / 2 + 160, 'VỀ MENU', {
@@ -59,6 +64,7 @@ export default class ResultScene extends Phaser.Scene {
     }).setOrigin(0.5).setInteractive()
 
     menuBtn.on('pointerdown', () => {
+      this.network.leaveRoom()
       this.scene.stop('UIScene')
       this.scene.stop('GameScene')
       this.scene.start('MenuScene')

@@ -35,7 +35,21 @@ export default class GameScene extends Phaser.Scene {
     this.sfx = SoundManager.getInstance()
   }
 
+  private cleanup() {
+    this.players.clear()
+    this.skillBarRects = []
+    this.skillBarCreated = false
+    this.selectedSkill = 'rock'
+    this.hasThrownThisTurn = false
+    this.isMyTurn = false
+    this.phase = 'waiting'
+  }
+
   create() {
+    this.cleanup()
+    this.events.on('shutdown', this.cleanup, this)
+    this.aimSystem = new AimSystem(this)
+    this.projectileSystem = new ProjectileSystem(this)
     const { width, height } = this.cameras.main
 
     // Background

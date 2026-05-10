@@ -46,7 +46,15 @@ export default class UIScene extends Phaser.Scene {
     this.network = NetworkManager.getInstance()
   }
 
+  private cleanup() {
+    this.clearSkillBar()
+    this.barCreated = false
+    this.skillIcons = []
+  }
+
   create() {
+    this.cleanup()
+    this.events.on('shutdown', this.cleanup, this)
     const { width, height } = this.cameras.main
 
     this.roundCircles = this.add.graphics().setDepth(1000)
