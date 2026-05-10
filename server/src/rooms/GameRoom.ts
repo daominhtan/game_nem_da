@@ -6,6 +6,8 @@ const GRAVITY = 980
 const GROUND_Y = 580
 const MAX_TURN_TIME = 15 // seconds
 const THROW_SPEED = 1500 // base speed multiplier for throw velocity
+const PLAYER_HIT_RADIUS = 55 // hitbox radius — visual character ~128px wide
+const PROJ_PREV_STEPS = 3 // sub-step checks for swept collision
 
 export class GameRoom extends Room<GameRoomSchema> {
   maxClients = 2
@@ -185,19 +187,37 @@ const velocityY = Math.sin(radians) * power * THROW_SPEED
         return
       }
 
-      // Check collision with players
-      this.state.players.forEach((player, playerId) => {
-        if (playerId !== projectile.ownerId && player.isAlive) {
-          const dist = Math.sqrt(
-            Math.pow(projectile.x - player.x, 2) + Math.pow(projectile.y - player.y, 2)
-          )
-          if (dist < 40) { // Hit radius
+      // Check collision with players (swept: check sub-steps between frames)
+      let hit = false
+      for (const [playerId, player] of this.state.players) {
+        if (playerId === projectile.ownerId || !player.isAlive) continue
+        const dist = Math.sqrt(
+          Math.pow(projectile.x - player.x, 2) + Math.pow(projectile.y - player.y, 2)
+        )
+        if (dist < PLAYER_HIT_RADIUS) {
+          this.handleProjectileHit(projectile, player)
+          hit = true
+          break
+        }
+        // Sub-step swept check: nếu đạn bay nhanh có thể skip qua player
+        const stepVx = projectile.velocityX / 60 / PROJ_PREV_STEPS
+        const stepVy = projectile.velocityY / 60 / PROJ_PREV_STEPS
+        for (let s = 1; s <= PROJ_PREV_STEPS; s++) {
+          const sx = projectile.x - stepVx * s
+          const sy = projectile.y - stepVy * s
+          const sd = Math.sqrt(Math.pow(sx - player.x, 2) + Math.pow(sy - player.y, 2))
+          if (sd < PLAYER_HIT_RADIUS) {
             this.handleProjectileHit(projectile, player)
-            clearInterval(interval)
-            this.state.projectiles.delete(projectileId)
+            hit = true
+            break
           }
         }
-      })
+        if (hit) break
+      }
+      if (hit) {
+        clearInterval(interval)
+        this.state.projectiles.delete(projectileId)
+      }
     }, 1000 / 60) // 60fps
   }
 
