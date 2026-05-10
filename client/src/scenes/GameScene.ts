@@ -14,6 +14,7 @@ export default class GameScene extends Phaser.Scene {
   private projectileSystem: ProjectileSystem
   private myPlayerId: string = ''
   private isMyTurn: boolean = false
+  private hasThrownThisTurn: boolean = false
   private phase: string = 'waiting'
   private cursors?: Phaser.Types.Input.Keyboard.CursorKeys
   private wasd?: Record<string, Phaser.Input.Keyboard.Key>
@@ -268,7 +269,7 @@ export default class GameScene extends Phaser.Scene {
 
     // Mouse aiming
     this.input.on('pointerdown', () => {
-      if (!this.isMyTurn || this.phase !== 'playing') return
+      if (!this.isMyTurn || this.phase !== 'playing' || this.hasThrownThisTurn) return
       const myPlayer = this.players.get(this.myPlayerId)
       if (!myPlayer || !myPlayer.isAlive()) return
       this.aimSystem.startAim(myPlayer.x, myPlayer.y, myPlayer.flipX)
@@ -281,13 +282,14 @@ export default class GameScene extends Phaser.Scene {
     })
 
     this.input.on('pointerup', () => {
-      if (!this.isMyTurn || this.phase !== 'playing') return
+      if (!this.isMyTurn || this.phase !== 'playing' || this.hasThrownThisTurn) return
       if (!this.aimSystem.isAiming()) return
 
       const myPlayer = this.players.get(this.myPlayerId)
       const { angle, power } = this.aimSystem.stopAim()
       if (power < 0.05) return
 
+      this.hasThrownThisTurn = true
       console.log(`Throw: angle=${angle}, power=${power}, skill=${this.selectedSkill}, facingLeft=${myPlayer?.flipX}`)
       this.network.sendThrow(angle, power, this.selectedSkill)
 
@@ -314,6 +316,7 @@ export default class GameScene extends Phaser.Scene {
 
     this.network.on('turnStart', (data: any) => {
       this.isMyTurn = data.playerId === this.myPlayerId
+      this.hasThrownThisTurn = false
       if (this.isMyTurn) {
         this.showTurnIndicator('LƯỢT CỦA BẠN!')
         this.sfx.playTurnStart()

@@ -1,134 +1,244 @@
 # Implementation Status - Ném Đá Online
 
-## ✅ Completed Features (Priority 1 - Core)
+## ✅ Completed Features
 
-### 1. Colyseus Schema & Server State
-- `PlayerSchema`: id, name, characterId, x, y, velocity, hp, maxHp, animState, facingLeft, statusEffect, kills, deaths, isAlive
-- `ProjectileSchema`: id, ownerId, type, x, y, velocityX, velocityY, rotation
-- `GameRoomSchema`: phase, timeLeft, windForce, mapId, rounds, players map, projectiles map, currentTurn, turnNumber
+### Core Systems
+- [x] Colyseus Schema & Server State (PlayerSchema, ProjectileSchema, GameRoomSchema)
+- [x] Turn-based system (15s timeout, auto-throw, turn switching, random first turn, max 20 turns/round)
+- [x] Server authoritative physics (gravity 980, wind, ground collision at y=580, player collision 40px radius)
+- [x] Network messages (move, throw, ready, taunt, emoji, turnStart/End, hit, death, roundEnd, gameEnd)
+- [x] Client-side AimSystem (drag-to-aim, trajectory prediction, power bar, angle display)
+- [x] Client-side ProjectileSystem (spawn, particle trails, ground hit destroy)
+- [x] Client-side PlayerEntity (animations, HP bars, interpolation lerp 0.15)
 
-### 2. Turn-Based System
-- 2 players per room (maxClients: 2)
-- 15-second timeout per turn with auto-throw
-- Turn switching after each throw
-- Random first turn
-- Max 20 turns per round (10 per player)
-- Wind changes every turn (-150 to +150)
+### Scenes
+- [x] BootScene (placeholder textures at runtime)
+- [x] MenuScene (title + "Bắt Đầu" button)
+- [x] CharacterSelect (grid 2x2, character stats)
+- [x] GameScene (core gameplay, turn indicators, damage text, HUD)
+- [x] ResultScene (Win/Lose display)
 
-### 3. Server Authoritative Physics
-- Projectile simulation at 60fps on server
-- Gravity: 980 pixels/s²
-- Wind force affects projectile X velocity
-- Ground collision at y=580
-- Player collision detection (40px radius)
+### Characters
+- [x] Warrior (HP 120, Speed 180, skills: rock/big_rock/bomb/soap)
+- [x] Mage (HP 80, Speed 200, skills: rock/fireball/pillow/wind_blade)
+- [x] Samurai (HP 100, Speed 220, skills: rock/shuriken/wind_blade/triple_rock)
+- [x] Bear (HP 150, Speed 140, skills: rock/hug_rush/honey/rock_rain)
 
-### 4. Network Messages
-- Client → Server: `move`, `throw`, `ready`, `taunt`, `emoji`
-- Server → Client: `turnStart`, `turnEnd`, `hit`, `death`, `roundEnd`, `gameEnd`, `timeout`, `windChange`
+### Skills System
+- [x] 12 skill types on server (rock, big_rock, bomb, soap, pillow, fireball, wind_blade, shuriken, hug_rush, honey, rock_rain, triple_rock)
+- [x] All skills with correct damage, AoE, status effects
+- [x] Cooldown tracking on client
+- [x] SKILL_DATA config
 
-### 5. Client-Side Systems
-- **AimSystem**: Drag-to-aim with trajectory prediction (30 points), power bar, angle display
-- **ProjectileSystem**: Spawns projectiles, adds particle trails, destroys on ground hit
-- **PlayerEntity**: Handles animations, HP bars, interpolation (lerp 0.15)
+### VFX & Audio
+- [x] Particle trails per projectile type (bomb: fire, soap: bubbles, fireball: embers)
+- [x] Explosion effects (bomb: flash+fire+smoke, soap: rainbow bubbles, pillow: feathers)
+- [x] Dust particles on ground impact
+- [x] Projectile rotation during flight
+- [x] Procedural SoundManager (14 SFX + BGM via Web Audio API)
 
-### 6. Scenes
-- **BootScene**: Generates placeholder textures at runtime (characters, projectiles, backgrounds)
-- **MenuScene**: Title screen with "Bắt Đầu" button
-- **CharacterSelect**: Grid 2x2 with character stats (HP, Speed, Power)
-- **GameScene**: Core gameplay with turn indicators, damage text, HUD
-- **ResultScene**: Win/Lose display
+### Gameplay Features
+- [x] Emoji system (Z/X/C/V)
+- [x] Combo system (x2 = 1.1x, x3 = 1.2x damage)
+- [x] Critical hit (20% chance, 1.5x damage, slow-motion 300ms)
+- [x] Squash & stretch animations (idle breathing, landing, hit, throw, die, taunt)
+- [x] HP bars (green current, yellow afterburn, color changes, knockback)
+- [x] Ground physics fix (world bounds, enemy no gravity, local player gravity)
 
-### 7. Characters
-- **Warrior**: HP 120, Speed 180, Skills: rock, big_rock, bomb, soap
-- **Mage**: HP 80, Speed 200, Skills: rock, fireball, pillow, wind_blade
-- **Samurai**: HP 100, Speed 220, Skills: rock, shuriken, wind_blade, triple_rock
-- **Bear**: HP 150, Speed 140, Skills: rock, hug_rush, honey, rock_rain
+### UI
+- [x] Skill selection bar (bottom, colored icons, number keys 1-4, cooldown overlay)
+- [x] Turn indicator (countdown bar, texto lớn giữa màn hình)
+- [x] Wind indicator (icon + direction)
+- [x] Damage floating text (font đỏ, bay lên, fade out)
+- [x] Round indicator (best of 3 circles)
 
-### 8. Skills System
-- 12 skill types fully implemented on server (rock, big_rock, bomb, soap, pillow, fireball, wind_blade, shuriken, hug_rush, honey, rock_rain, triple_rock)
-- All with correct damage, AoE, status effects
-- Skill cooldown tracking on client side
-- SKILL_DATA config with names, damage, cooldown values
+---
 
-### 9. Skill Selection UI (GameScene, depth 200)
-- Skill bar at bottom of screen with colored icons per skill type, rendered in GameScene (UIScene overlay had rendering issues)
-- Click to select or press number keys 1-4
-- Green border highlights selected skill via stored rect references + `setData('skillId')`
-- Cooldown overlay (semi-transparent arc + countdown text)
-- "CHON DAN (phim 1-4):" title above icons
+## 📋 Implementation Roadmap
 
-### 10. Particle VFX (ProjectileSystem)
-- Unique particle trails per projectile type (bomb: fire, soap: bubbles, fireball: embers)
-- Explosion effects: bomb (flash+fire+smoke), soap (rainbow bubbles), pillow (feathers), fireball (embers)
-- Dust particles on ground impact / regular hits
-- Projectile rotation during flight
+### Phase 1: Status Effects & Polish (Current)
 
-### 11. Emoji System (Z/X/C/V)
-- Z → 😂, X → 😡, C → 👍, V → 💀
-- Emoji floats above player for 2s
+#### Status Effects (Server + Client)
+- [ ] `stunned` effect (soap hit → 2s không kiểm soát, trượt ngã)
+  - Server: set statusEffect + statusDuration, block move/throw
+  - Client: animation "slide" loop, indicator icon trên đầu
+  - Hết effect: server clear, client về idle
+- [ ] `sleeping` effect (pillow hit → 2s ngủ, không làm gì được)
+  - Server: set statusEffect, skip turn entirely
+  - Client: ZZZ animation, nhân vật gục đầu
+- [ ] `slowed` effect (honey hit → 50% speed trong 3s)
+  - Server: giảm moveSpeed
+  - Client: tint màu vàng, animation chậm lại
+- [ ] UI status indicator trên đầu nhân vật (icon + timer countdown)
+- [ ] Turn auto-skip when defender stunned/sleeping
 
-### 12. Combo System
-- 2 hits within 3s = COMBO x2 (1.1x damage)
-- 3 hits within 3s = COMBO x3 (1.2x damage)  
-- Combo displayed mid-screen
-- Reset between rounds
+#### Parallax Backgrounds
+- [ ] 3-layer parallax (far ×0.05, mid ×0.2, near ×0.5)
+- [ ] Cloud movement (3-5 đám mây trôi)
+- [ ] Floating dust particles (10-15 hạt bụi)
+- [ ] Leaf particles (rơi mỗi 3-5s)
+- [ ] Wind-affected particles (bụi bay theo windForce)
 
-### 13. Critical Slow-Motion
-- 20% critical hit chance (1.5x damage)
-- Slow-motion effect (timeScale 0.3 for 300ms)
-- "⚡ CRITICAL!" flash + camera shake
+#### Platform Tilemaps
+- [ ] Tiled JSON map support (2560×720)
+- [ ] Layer 1: Background (cây, núi, mây)
+- [ ] Layer 2: Terrain collision (đất nền, platforms)
+- [ ] Layer 3: Decoration (cỏ, hoa, bướm)
+- [ ] Main ground (y=580, full width)
+- [ ] Floating platforms (giữa: y=450, trái: y=500, phải: y=500)
+- [ ] Camera bounds 0..2560, lerp follow cả 2 players
+- [ ] Spawn points (P1: x=200, P2: x=1080)
 
-### 14. Squash & Stretch Animations (PlayerEntity)
-- Idle breathing (subtle scale oscillation)
-- Landing squash
-- Hit: stretch horizontally, squish vertically
-- Throw: windup → release → bounce
-- Die: squish → dramatic sink
-- Taunt: bouncy + scale wobble
+---
 
-### 15. Ground Physics Fix
-- Removed ground collider (`tileSprite` + `Rectangle` static body) entirely
-- Uses `physics.world.setBounds(0, 0, 1280, GAME_CONFIG.groundLevel=580)` to block falling through floor
-- Enemy players: `setAllowGravity(false)` — position driven purely by server interpolation, no gravity jitter
-- Local player keeps gravity for natural landing on ground level
-- Fixes root cause: interpolation was overriding collider position each frame, pushing enemy through ground
+### Phase 2: Room & Matchmaking
 
-### 16. Procedural Sound Effects & BGM
-- `SoundManager` singleton using Web Audio API — no external audio files needed
-- 14 procedural sound effects: throw (whoosh), hit (thump), critical (metallic ping), combo (ascending chimes), death (descending sawtooth), emoji (pop), taunt (ascending square wave beeps), turn start (bell), timeout (alarm), explosion (rumble+noise), click (UI), jump (rising tone), win (ascending notes), lose (descending notes)
-- BGM: looping triangle-wave melody with bass drone
-- Sounds integrated into GameScene events, ProjectileSystem ground impacts
+#### Auto Match Queue
+- [ ] Server matchmaking queue (joinQueue, leaveQueue)
+- [ ] Auto-match khi có 2 players trong queue
+- [ ] 15s timeout → tạo bot match nếu không tìm thấy người
+- [ ] Queue position indicator trên client
 
-## 🚧 Partially Implemented
+#### Room System
+- [ ] Room code generation (6 ký tự, dễ nhập: "ABCD12")
+- [ ] Public/Private room toggle
+- [ ] "TẠO PHÒNG" → tạo room, hiển thị code
+- [ ] "THAM GIA PHÒNG" → nhập code → join
+- [ ] Room states: waiting → selecting → countdown → playing → roundEnd → gameEnd
+- [ ] 30s character select timer
+- [ ] Ready check (cả 2 ready → countdown)
+- [ ] Auto-random character nếu hết giờ chưa chọn
 
-### Animations
-- Basic structure in place (idle, run, jump, aim, throw, hit, die)
-- Animation playback based on server state
-- Squash & stretch: ✅ (detailed above)
-- Parallax backgrounds: TODO
+#### Bot System
+- [ ] BotPlayer class (tính góc + power, random skill)
+- [ ] Bot difficulty levels (dễ: random 0.4-0.7, khó: aim chính xác 0.8-1.0)
+- [ ] Bot taunt/emoji ngẫu nhiên (tạo cảm giác người thật)
+- [ ] Bot disconnect handling
 
-### HP System
-- Green bar (current HP): ✅
-- Yellow "afterburn" bar (delayed): ✅
-- Color changes (green→orange→red): ✅
-- Knockback on hit: ✅
+#### Reconnect System
+- [ ] Server detect disconnect (WebSocket close)
+- [ ] 30s reconnect window
+- [ ] Pause game khi có người disconnect
+- [ ] Gửi full state khi reconnect thành công
+- [ ] Auto-win nếu không reconnect kịp
 
-## ❌ Not Yet Implemented (Priority 2-4)
+---
 
-### Polish
-- [ ] Sound effects + BGM
-- [ ] Parallax backgrounds
-- [ ] Platform tilemaps (currently flat ground only)
+### Phase 3: Mobile Support
 
-### Content
-- [ ] 3 Maps (only Forest Island placeholder)
-- [ ] Taunt animations (basic tween exists, no spritesheet)
+#### Responsive Scaling
+- [ ] Phaser Scale.FIT mode (1280×720 base, scale to any screen)
+- [ ] autoCenter: CENTER_BOTH
+- [ ] Portrait mode detection + "Xoay ngang" overlay
+- [ ] UI element scaling (HP bar, skill icons, timer, buttons)
 
-### Fun Features
-- [ ] Easter eggs
-- [ ] Win/lose quotes
-- [ ] Confetti
-- [ ] Random funny names
+#### Touch Controls
+- [ ] Virtual joystick (left 1/3 screen, move + jump)
+- [ ] Touch drag aiming (right 2/3 screen)
+- [ ] Touch-to-throw (release = ném)
+- [ ] Skill/taunt/emoji buttons bottom-right (56×56px min)
+- [ ] Touch feedback (visual press state)
+- [ ] Minimum touch target 44px (Apple HIG)
+
+#### Performance Optimization
+- [ ] Reduce particle quantity 60% on mobile
+- [ ] Physics tick 30fps on mobile (vs 60)
+- [ ] Texture bias 2 (lower mipmap quality)
+- [ ] Disable far parallax layer on low-end devices
+- [ ] Device performance detection (high/medium/low)
+
+---
+
+### Phase 4: Content & Maps
+
+#### Map 2: "Núi Lửa Điên"
+- [ ] Dung nham chảy background (màu đỏ cam, animated)
+- [ ] Platforms rơi dần (20s rơi → 10s rebuild)
+- [ ] Mưa đá ngẫu nhiên (5 damage, có cảnh báo trước)
+- [ ] Map unlock system (after 10 games)
+
+#### Map 3: "Đêm Huyền Bí"
+- [ ] Dark background + stars
+- [ ] Moon light effect (phát sáng)
+- [ ] Fog of war (spotlight quanh nhân vật, 70% tối)
+- [ ] Ambient firefly particles
+
+#### Taunt Animations
+- [ ] Warrior: giơ cục xà bông + "Sạch bóng! 🫧"
+- [ ] Mage: đọc sách + ngáp + "Zzz..."
+- [ ] Samurai: rút kiếm soi bóng + "HA-MEN!"
+- [ ] Bear: vỗ bụng + "Ôm cái nào! 🐻"
+- [ ] Taunt SFX riêng từng nhân vật
+- [ ] Taunt có thể bị đánh (punishable)
+
+---
+
+### Phase 5: Error Handling & Edge Cases
+
+#### Network Error Handling
+- [ ] Disconnect detection + auto-reconnect (max 15 retries, 2s interval)
+- [ ] Request timeout (5s) + retry 1 lần
+- [ ] Server error responses (ROOM_FULL, INVALID_MOVE, RATE_LIMIT)
+- [ ] Toast notification system cho lỗi
+- [ ] Full state cache on client (reconnect sync)
+
+#### Gameplay Edge Cases
+- [ ] Cả 2 cùng chết (AoE tick timing → draw hoặc phân định)
+- [ ] Rơi xuống map (y > MAP_BOTTOM_BOUNDARY → death)
+- [ ] Đạn bay mãi không dừng (lifetime > 10s hoặc out of bounds → force remove)
+- [ ] Double throw spam (ignore nếu < 100ms)
+- [ ] AFK detection (3 lượt liên tiếp timeout → auto-play mode)
+
+#### Server Validation
+- [ ] Validate moves (phase check, status effect check, speed limit)
+- [ ] Validate throw (current turn, angle 0-360, power 0.05-1, skillId, cooldown)
+- [ ] Validate emoji (whitelist, cooldown 3s)
+- [ ] Rate limiting (max messages/s per client)
+- [ ] Anti-speed hack (distance check per tick)
+
+#### Client Fallbacks
+- [ ] Server silent 5s → enable client prediction
+- [ ] Invalid state → requestFullSync
+- [ ] Animation desync → force reset to idle
+- [ ] Asset load fail → placeholder texture (magenta ? box)
+- [ ] WebSocket unsupported → error screen
+
+#### Logging & Debug
+- [ ] GameLogger (debug/info/warn/error levels, timestamp, category)
+- [ ] Error report to server (production, fire-and-forget POST)
+- [ ] Race condition handling (CriticalSection lock cho turn management)
+
+---
+
+### Phase 6: Fun Features & Polish
+
+#### Easter Eggs
+- [ ] 3 lần ném trượt liên tiếp → nhân vật nhìn tay lắc đầu
+- [ ] 2 đá chạm nhau giữa không trung → "PING!" + nổ nhỏ
+- [ ] Hidden animation khi idling lâu (>10s)
+
+#### Win/Lose Quotes
+- [ ] 5 quotes random mỗi nhân vật
+- [ ] Speech bubble trên nhân vật (3s)
+- [ ] SFX quotes
+
+#### Confetti & Celebrations
+- [ ] Confetti particles khi thắng (ResultScene)
+- [ ] "THẢM BẠI!" banner khi thắng với >80% HP còn lại
+- [ ] "CÙNG CHẾT LOL!" khi double KO
+- [ ] Screen shake kết hợp
+
+#### Random Funny Names
+- [ ] 20+ random names trong danh sách
+- [ ] Auto-assign nếu không nhập tên
+- [ ] Hiển thị trên HUD + scoreboard
+
+#### Critical Hit Polish
+- [ ] Lightning bolt VFX tại điểm trúng
+- [ ] Screen flash vàng 0.1s
+- [ ] Extra camera shake
+
+---
 
 ## 🎮 How to Play
 
@@ -150,22 +260,13 @@ nem-da-game/
 │       ├── entities/       # PlayerEntity
 │       ├── systems/        # AimSystem, ProjectileSystem
 │       ├── network/        # NetworkManager (Colyseus client)
-│       └── config/        # characters.ts
+│       └── config/         # characters.ts
 ├── server/                 # Colyseus 0.15
 │   └── src/
-│       ├── rooms/         # GameRoom (server authoritative)
-│       └── schema.ts      # PlayerSchema, ProjectileSchema
+│       ├── rooms/          # GameRoom (server authoritative)
+│       └── schema.ts       # PlayerSchema, ProjectileSchema
 └── shared/                 # Common types
     └── src/
         ├── types/          # TypeScript interfaces
         └── constants/      # GAME_CONFIG, PHYSICS, MSG
 ```
-
-## 🏃 Next Steps
-
-1. Implement status effects (stun, sleep, slide)
-2. Parallax backgrounds
-3. Platform tilemaps (currently flat ground only)
-4. 3 Maps (only Forest Island placeholder)
-5. Add real sprite assets (replace placeholders)
-6. Easter eggs, win/lose quotes, confetti, random funny names

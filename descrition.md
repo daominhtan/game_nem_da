@@ -908,5 +908,666 @@ room.broadcast("emoji", { senderId, emoji: string });
 
 ---
 
-*GDD Version 1.0 — Tối ưu cho opencode + Phaser 4 + Colyseus*
+## 17. ROOM & MATCHMAKING
+
+### Luồng tạo/join phòng
+
+```
+[MenuScene]
+  ├── "CHƠI NGAY" → Auto match (tìm phòng ngẫu nhiên)
+  ├── "TẠO PHÒNG" → Tạo room private/public, nhận room code
+  └── "THAM GIA PHÒNG" → Nhập room code → join room cụ thể
+```
+
+### Auto Match (CHƠI NGAY)
+
+```typescript
+// Client gửi yêu cầu match:
+room.send("joinQueue", { characterId: string });
+
+// Server duy trì queue:
+class MatchmakingQueue {
+  private queue: Array<{ sessionId: string, characterId: string, joinedAt: number }> = [];
+
+  // Mỗi khi có người vào queue:
+  onPlayerJoin(player) {
+    this.queue.push(player);
+    if (this.queue.length >= 2) {
+      const p1 = this.queue.shift()!;
+      const p2 = this.queue.shift()!;
+      this.createMatch(p1, p2);
+    }
+  }
+
+  // Timeout: nếu sau 15s không tìm được đối thủ → tạo phòng với bot
+  onQueueTimeout(player) {
+    if (stillInQueue(player)) {
+      this.createBotMatch(player);
+    }
+  }
+}
+```
+
+### Trạng thái phòng
+
+| State | Mô tả | Actions |
+|-------|-------|---------|
+| `waiting` | Chờ người chơi thứ 2 | Hiển thị room code, chờ join |
+| `selecting` | Cả 2 đã vào, đang chọn nhân vật | Timer 30s, ready check |
+| `countdown` | Đếm ngược 3-2-1 FIGHT | Mọi người đã lock character |
+| `playing` | Đang trong trận | Turn-based gameplay |
+| `paused` | Tạm dừng (disconnect) | Chờ reconnect 30s |
+| `roundEnd` | Kết thúc 1 round | Show round summary 5s |
+| `gameEnd` | Kết thúc trận đấu | Show result screen |
+
+### Xử lý disconnect / reconnect
+
+```typescript
+// Server:
+class GameRoom {
+  onPlayerDisconnect(sessionId) {
+    const player = this.players.get(sessionId);
+    if (!player) return;
+
+    // Nếu đang ở màn hình chờ hoặc chọn nhân vật:
+    if (this.state.phase === "waiting" || this.state.phase === "selecting") {
+      this.broadcast("playerLeft", { playerId: player.id });
+      this.state.phase = "waiting";
+      return;
+    }
+
+    // Nếu đang chơi dở:
+    player.disconnectedAt = Date.now();
+    player.isDisconnected = true;
+    this.state.phase = "paused";
+    this.broadcast("playerDisconnected", {
+      playerId: player.id,
+      reconnectTimeout: 30,
+    });
+
+    // Chờ reconnect 30s:
+    this.clock.setTimeout(() => {
+      if (player.isDisconnected) {
+        // Không reconnect kịp → người kia thắng
+        this.endGame(player.isDisconnected ? opponentId : player.id);
+      }
+    }, 30000);
+  }
+
+  onPlayerReconnect(sessionId, newSessionId) {
+    const player = this.players.get(sessionId);
+    if (!player) return;
+
+    player.isDisconnected = false;
+    player.disconnectedAt = 0;
+    this.state.phase = "playing";
+
+    // Gửi full state hiện tại cho player reconnect
+    this.sendFullState(newSessionId);
+
+    this.broadcast("playerReconnected", { playerId: player.id });
+  }
+}
+```
+
+### Cấu trúc Room trên server
+
+```typescript
+// Mỗi phòng là 1 Colyseus Room instance
+import { Room, Client } from "colyseus";
+
+class GameRoom extends Room<GameRoomSchema> {
+  maxClients = 2;
+  roomCode: string;     // 6 ký tự, dễ nhập
+  isPublic: boolean;     // true = auto match, false = private
+
+  onCreate(options: { isPublic: boolean }) {
+    this.roomCode = generateRoomCode(); // "ABCD12"
+    this.isPublic = options.isPublic;
+    this.setState(new GameRoomSchema());
+    this.state.phase = "waiting";
+  }
+
+  onJoin(client: Client, options: { characterId?: string }) {
+    if (this.clients.length === 1) {
+      // Người đầu tiên: set làm P1
+      this.state.phase = "waiting";
+    } else if (this.clients.length === 2) {
+      // Đủ 2 người: chuyển sang selecting
+      this.state.phase = "selecting";
+      this.state.timeLeft = 30;
+      // Bắt đầu timer chọn nhân vật
+      this.clock.setTimeout(() => this.onSelectTimeout(), 30000);
+    }
+  }
+
+  onLeave(client: Client) {
+    this.handleDisconnect(client.sessionId);
+  }
+}
+```
+
+### Bot (khi không tìm được người)
+
+```typescript
+class BotPlayer {
+  // Bot đơn giản:
+  // 1. Tính góc ngắm về phía địch
+  // 2. Tính lực ném (random 0.6..0.9)
+  // 3. Có 30% chance dùng skill đặc biệt
+  // 4. Có 10% chance dùng taunt (để tạo cảm giác "người thật")
+  
+  getBotAction(enemyPos: { x: number, y: number }): BotAction {
+    const angle = Math.atan2(
+      enemyPos.y - this.y,
+      enemyPos.x - this.x
+    );
+    const power = 0.6 + Math.random() * 0.3;
+    const skillId = Math.random() < 0.3
+      ? this.getRandomSkill()
+      : "rock";
+    
+    return { angle, power, skillId };
+  }
+}
+```
+
+---
+
+## 18. MOBILE SUPPORT
+
+### Responsive Scaling Strategy
+
+```typescript
+// Game được thiết kế ở 1280×720, scale xuống mobile
+// Dùng Phaser 4 Scale Manager với FIT mode:
+
+const config: Phaser.Types.Core.GameConfig = {
+  width: 1280,
+  height: 720,
+  scale: {
+    mode: Phaser.Scale.FIT,
+    autoCenter: Phaser.Scale.CENTER_BOTH,
+  },
+  // ...
+};
+```
+
+### Touch Controls
+
+#### Aiming (Ngắm bắn)
+
+```
+Trên mobile: thay vì kéo-thả chuột, dùng touch-drag
+  TOUCH START → bắt đầu ngắm (vẽ trajectory)
+  TOUCH MOVE  → cập nhật angle + power
+  TOUCH END   → ném
+
+Vị trí touch trên màn hình:
+  - Touch bắt đầu từ vị trí nhân vật hoặc bất kỳ đâu
+  - Kéo từ điểm touch đến vị trí hiện tại
+  - Hướng ngược: từ nhân vật đến điểm touch
+
+Joystick ảo cho di chuyển:
+  - Bên trái màn hình: joystick di chuyển (trái/phải)
+  - Vuốt lên: nhảy
+  - Bên phải màn hình: dùng để ngắm/ném
+```
+
+#### Virtual Joystick
+
+```typescript
+class VirtualJoystick {
+  // Hiển thị khi touch vào 1/3 trái màn hình
+  // Base: vòng tròn trong suốt opacity 0.3
+  // Thumb: chấm trắng di chuyển trong base
+  
+  baseX: number;
+  baseY: number;
+  thumbX: number;
+  thumbY: number;
+  radius: number = 60;
+  
+  onTouchMove(pointer: Phaser.Input.Pointer) {
+    const dx = pointer.x - this.baseX;
+    const dy = pointer.y - this.baseY;
+    const dist = Math.min(Math.sqrt(dx*dx + dy*dy), this.radius);
+    const angle = Math.atan2(dy, dx);
+    
+    this.thumbX = this.baseX + Math.cos(angle) * dist;
+    this.thumbY = this.baseY + Math.sin(angle) * dist;
+    
+    // Trả về hướng di chuyển (normalized)
+    return {
+      horizontal: dist > 20 ? Math.cos(angle) * (dist / this.radius) : 0,
+      vertical: dist > 20 ? Math.sin(angle) * (dist / this.radius) : 0,
+    };
+  }
+}
+```
+
+#### Skill Buttons
+
+```
+Mobile layout (bottom của màn hình):
+┌──────────────────────────────────┐
+│                                  │
+│                                  │
+│                                  │
+│                                  │
+│  [Joystick]             [Skill1] │
+│                        [Skill2] │
+│                        [Skill3] │
+│  [Move]                [Taunt]  │
+│  [Jump]                [Emoji]  │
+└──────────────────────────────────┘
+
+- Skill buttons: to hơn (64×64px), có touch feedback
+- Khoảng cách giữa các button tối thiểu 16px (tránh touch miss)
+```
+
+### UI Adaptations cho Mobile
+
+| Element | Desktop | Mobile |
+|---------|---------|--------|
+| HP Bar | 200px | 120px (scale xuống) |
+| Skill Icons | 48×48 | 56×56 (dễ bấm) |
+| Timer | Font 48px | Font 36px |
+| Damage Text | Font 28px | Font 22px |
+| Button size | 32px height | 44px height (touch target) |
+| Damage Feed | Góc trên phải | Góc trên trái (dễ đọc) |
+
+### Portrait Mode Detection
+
+```typescript
+// Phát hiện xoay dọc → cảnh báo
+class OrientationManager {
+  checkOrientation() {
+    const isLandscape = window.innerWidth > window.innerHeight;
+    if (!isLandscape) {
+      // Hiển thị overlay "Xoay ngang màn hình để chơi!"
+      this.showRotateOverlay();
+    } else {
+      this.hideRotateOverlay();
+    }
+  }
+}
+```
+
+### Performance tối ưu trên mobile
+
+```typescript
+// Giảm particle trên mobile:
+const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+const particleConfig = {
+  quantity: isMobile ? 2 : 5,         // Giảm 60% particle
+  lifespan: isMobile ? 150 : 300,
+};
+
+// Giảm quality shadow/physics:
+if (isMobile) {
+  scene.physics.world.setFPS(30);    // Physics tick 30fps thay vì 60
+  scene.renderer.setTextureBias(2);  // Texture mipmap lower quality
+}
+
+// Tắt parallax layer xa trên mobile yếu:
+if (isMobile && devicePerformance === "low") {
+  bgLayerFar.setVisible(false);
+}
+```
+
+### Touch Gesture Map
+
+| Gesture | Khu vực | Action |
+|---------|---------|--------|
+| Single tap | 1/3 trái màn hình | Di chuyển đến chạm |
+| Touch & hold + drag | 1/3 trái | Joystick di chuyển |
+| Touch & drag | 2/3 phải | Ngắm (kéo-thả) |
+| Tap skill icon | Góc dưới phải | Chọn skill |
+| Double tap | Bất kỳ | Taunt |
+| Swipe up | Toàn màn hình | Jump |
+| Long press | Trên nhân vật địch | Xem thông tin |
+
+---
+
+## 19. ERROR HANDLING & EDGE CASES
+
+### Network Errors
+
+```typescript
+class NetworkErrorHandler {
+  // Các loại lỗi network cần xử lý:
+  
+  // 1. Mất kết nối (WebSocket disconnect)
+  onDisconnect() {
+    // Lưu state hiện tại vào cache
+    this.cacheState();
+    
+    // Hiển thị overlay "ĐANG KẾT NỐI LẠI..."
+    this.showReconnectOverlay();
+    
+    // Tự động reconnect mỗi 2s, tối đa 15 lần
+    this.attemptReconnect({
+      maxRetries: 15,
+      retryInterval: 2000,
+      onSuccess: () => {
+        this.hideReconnectOverlay();
+        this.syncFullState();
+      },
+      onFail: () => {
+        this.showDisconnectScreen();
+        // Cho phép người chơi về menu
+      },
+    });
+  }
+
+  // 2. Timeout request
+  onRequestTimeout(action: string, timeout: number = 5000) {
+    console.warn(`Request timeout: ${action}`);
+    // Retry 1 lần
+    if (!this.retryTracker[action]) {
+      this.retryTracker[action] = true;
+      this.retryRequest(action);
+    } else {
+      this.showError(`Không thể ${action}. Vui lòng thử lại.`);
+    }
+  }
+
+  // 3. Server error response
+  onServerError(code: string, message: string) {
+    switch (code) {
+      case "ROOM_FULL":
+        this.showToast("Phòng đã đầy! 😅");
+        break;
+      case "INVALID_MOVE":
+        // Silent ignore (có thể do lag/duplicate)
+        break;
+      case "GAME_ALREADY_STARTED":
+        this.showToast("Trận đấu đã bắt đầu!");
+        break;
+      case "RATE_LIMIT":
+        this.showToast("Chậm thôi bạn ơi! ⏰");
+        break;
+      default:
+        console.error("Server error:", code, message);
+        this.showToast("Có lỗi xảy ra! Mã: " + code);
+    }
+  }
+}
+```
+
+### Edge Cases trong Gameplay
+
+```typescript
+// 1. Cả 2 cùng chết trong 1 lượt (đòn AoE)
+handleBothDeath() {
+  // Server kiểm tra: nếu cả 2 HP <= 0 sau 1 lượt
+  if (p1.hp <= 0 && p2.hp <= 0) {
+    // Tính damage chính xác, ai chết trước
+    if (p1.damageTick < p2.damageTick) {
+      // P1 chết trước → P2 thắng
+      this.endRound(p2.id);
+    } else if (p2.damageTick < p1.damageTick) {
+      this.endRound(p1.id);
+    } else {
+      // Cùng lúc → hòa, cả 2 được 1 điểm round
+      this.state.p1RoundsWon += 1;
+      this.state.p2RoundsWon += 1;
+      this.broadcast("roundEnd", { 
+        winnerId: "draw", 
+        message: "CÙNG CHẾT LOL! 💥" 
+      });
+    }
+  }
+}
+
+// 2. Người chơi ở ngoài map (rơi xuống)
+handleFallOutOfMap(player) {
+  if (player.y > MAP_BOTTOM_BOUNDARY) {
+    player.hp = 0;
+    player.isAlive = false;
+    this.broadcast("death", { 
+      targetId: player.id, 
+      killerId: "fall", 
+      message: "Rơi xuống vực! 💀" 
+    });
+  }
+}
+
+// 3. Đạn bay mãi không dừng (never hit ground)
+handleProjectileStuck(projectile) {
+  // Nếu đạn bay quá 10s hoặc ra khỏi map bounds
+  if (projectile.lifetime > 10000 || 
+      projectile.x < -500 || projectile.x > 3500 ||
+      projectile.y < -500 || projectile.y > 1500) {
+    this.removeProjectile(projectile.id);
+    this.endTurn();
+  }
+}
+
+// 4. Double input (người chơi gửi 2 throw cùng lúc)
+handleDoubleThrow(sessionId) {
+  const lastThrowTime = this.playerLastThrow.get(sessionId) || 0;
+  const now = Date.now();
+  
+  if (now - lastThrowTime < 100) {
+    // Bỏ qua throw thứ 2 (anti-spam)
+    console.warn(`Double throw from ${sessionId}`);
+    return;
+  }
+  this.playerLastThrow.set(sessionId, now);
+  this.processThrow(sessionId, data);
+}
+
+// 5. Người chơi cố tình AFK nhiều lượt
+handleRepeatedAfk(player) {
+  player.afkCount = (player.afkCount || 0) + 1;
+  if (player.afkCount >= 3) {
+    // Tự động force throw mỗi lượt với power thấp
+    player.autoPlay = true;
+    this.broadcast("afkWarning", { 
+      playerId: player.id, 
+      message: "AFK quá 3 lượt! Tự động ném..." 
+    });
+  }
+}
+```
+
+### Validation Layer (Server-side)
+
+```typescript
+class ServerValidator {
+  // Validate tất cả input từ client trước khi xử lý
+
+  validateMove(player: PlayerSchema, data: any): boolean {
+    // Chỉ cho phép di chuyển nếu đang trong phase playing
+    if (this.state.phase !== "playing") return false;
+
+    // Không cho di chuyển nếu đang bị stun/sleep
+    if (player.statusEffect === "stunned" || player.statusEffect === "sleeping") return false;
+
+    // Giới hạn speed (chống hack client)
+    const dx = data.x - player.x;
+    const dy = data.y - player.y;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    if (dist > player.moveSpeed * 0.1) return false; // 100ms interval
+
+    return true;
+  }
+
+  validateThrow(player: PlayerSchema, data: any): boolean {
+    // Chỉ người đang có lượt mới được ném
+    if (this.state.currentTurn !== player.id) return false;
+
+    // Validate angle (0..360)
+    if (typeof data.angle !== "number" || data.angle < 0 || data.angle > 360) return false;
+
+    // Validate power (0..1)
+    if (typeof data.power !== "number" || data.power < 0.05 || data.power > 1) return false;
+
+    // Validate skillId
+    const validSkills = ["rock", "big_rock", "bomb", "soap", "pillow", "fireball", 
+                         "wind_blade", "shuriken", "hug_rush", "honey", "rock_rain", "triple_rock"];
+    if (!validSkills.includes(data.skillId)) return false;
+
+    // Check cooldown
+    const playerSkills = this.playerSkills.get(player.id)!;
+    if (playerSkills.isOnCooldown(data.skillId)) return false;
+
+    return true;
+  }
+
+  validateEmoji(player: PlayerSchema, data: any): boolean {
+    const validEmojis = ["😂", "😡", "👍", "💀", "🔥", "😭", "🤡", "👻"];
+    if (!validEmojis.includes(data.emoji)) return false;
+
+    // Cooldown 3s
+    const lastEmoji = this.playerLastEmoji.get(player.id) || 0;
+    if (Date.now() - lastEmoji < 3000) return false;
+
+    return true;
+  }
+}
+```
+
+### Client-side Fallbacks
+
+```typescript
+class ClientFallbackHandler {
+  // 1. Khi server không phản hồi trong 5s
+  onServerSilent() {
+    this.showToast("Đang chờ server... ⏳");
+    // Tạm thời cho phép client tự simulate đạn (dự phòng)
+    this.enableClientPrediction(true);
+  }
+
+  // 2. Khi nhận state không hợp lệ
+  onInvalidState(state: any) {
+    console.warn("Invalid state received, requesting full sync");
+    this.room.send("requestFullSync");
+  }
+
+  // 3. Khi animation bị desync
+  onAnimationDesync(playerId: string) {
+    // Force reset animation về idle
+    const player = this.players.get(playerId);
+    if (player) {
+      player.sprite.play("idle", true);
+    }
+  }
+
+  // 4. Fallback textures (khi asset load thất bại)
+  onAssetLoadFail(key: string) {
+    console.error(`Failed to load asset: ${key}`);
+    // Dùng texture placeholder
+    this.scene.textures.addCanvas(key, (canvas) => {
+      canvas.width = 64;
+      canvas.height = 64;
+      const ctx = canvas.getContext("2d")!;
+      ctx.fillStyle = "#ff00ff";
+      ctx.fillRect(0, 0, 64, 64);
+      ctx.strokeStyle = "#ffffff";
+      ctx.strokeRect(0, 0, 64, 64);
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "32px monospace";
+      ctx.fillText("?", 20, 44);
+    });
+  }
+
+  // 5. Khi WebSocket không support (trình duyệt cũ)
+  onWebSocketUnsupported() {
+    this.showErrorScreen(
+      "Trình duyệt của bạn không hỗ trợ WebSocket.\n" +
+      "Vui lòng dùng Chrome/Firefox/Edge mới nhất."
+    );
+  }
+}
+```
+
+### Logging & Debug
+
+```typescript
+class GameLogger {
+  logLevel: "debug" | "info" | "warn" | "error" = "info";
+
+  log(level: string, category: string, message: string, data?: any) {
+    const timestamp = new Date().toISOString();
+    const prefix = `[${timestamp}][${level.toUpperCase()}][${category}]`;
+    
+    switch (level) {
+      case "debug":
+        if (this.logLevel === "debug") console.debug(prefix, message, data);
+        break;
+      case "info":
+        console.info(prefix, message, data);
+        break;
+      case "warn":
+        console.warn(prefix, message, data);
+        break;
+      case "error":
+        console.error(prefix, message, data);
+        // Gửi error report lên server nếu là production
+        if (process.env.NODE_ENV === "production") {
+          this.sendErrorReport({ category, message, data });
+        }
+        break;
+    }
+  }
+
+  sendErrorReport(error: any) {
+    // POST error report (non-blocking)
+    fetch("/api/log/error", {
+      method: "POST",
+      body: JSON.stringify(error),
+      headers: { "Content-Type": "application/json" },
+    }).catch(() => {}); // Fire and forget
+  }
+}
+```
+
+### Race Conditions & Consistency
+
+```typescript
+// Server dùng transaction lock cho critical sections:
+class CriticalSection {
+  private locked = false;
+  private queue: Array<() => void> = [];
+
+  async acquire(): Promise<void> {
+    if (!this.locked) {
+      this.locked = true;
+      return;
+    }
+    return new Promise((resolve) => {
+      this.queue.push(resolve);
+    });
+  }
+
+  release(): void {
+    if (this.queue.length > 0) {
+      const next = this.queue.shift()!;
+      next();
+    } else {
+      this.locked = false;
+    }
+  }
+}
+
+// Sử dụng cho turn management:
+const turnLock = new CriticalSection();
+
+async function handleThrow(playerId, data) {
+  await turnLock.acquire();
+  try {
+    // Process throw logic...
+    // Đảm bảo không có 2 throw xử lý cùng lúc
+  } finally {
+    turnLock.release();
+  }
+}
+```
+
+---
+
+*GDD Version 2.0 — Bổ sung Room & Matchmaking, Mobile Support, Error Handling*
 *Cập nhật khi cần thêm chi tiết*

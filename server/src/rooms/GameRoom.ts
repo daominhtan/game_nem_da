@@ -12,6 +12,7 @@ export class GameRoom extends Room<GameRoomSchema> {
   private turnTimer?: NodeJS.Timeout
   private windChangeInterval?: NodeJS.Timeout
   private comboCount: Map<string, { count: number; lastHitTime: number }> = new Map()
+  private hasThrownThisTurn: boolean = false
 
   onCreate(options: any) {
     this.setState(new GameRoomSchema())
@@ -31,9 +32,11 @@ export class GameRoom extends Room<GameRoomSchema> {
     })
 
     this.onMessage("throw", (client, data) => {
+      if (this.hasThrownThisTurn) return
       console.log(`[message] throw from ${client.sessionId}: ${JSON.stringify(data)}`)
       const player = this.state.players.get(client.sessionId)
       if (player && this.isPlayerTurn(player) && player.isAlive) {
+        this.hasThrownThisTurn = true
         this.handleThrow(player, data)
       }
     })
@@ -106,6 +109,7 @@ export class GameRoom extends Room<GameRoomSchema> {
   }
 
   private startTurn() {
+    this.hasThrownThisTurn = false
     const playerIds = Array.from(this.state.players.keys())
     const currentPlayer = this.state.players.get(playerIds[this.state.currentTurn])
 
@@ -328,6 +332,7 @@ const velocityY = Math.sin(radians) * power * THROW_SPEED
 
   private handleTimeout() {
     if (this.turnTimer) clearInterval(this.turnTimer)
+    if (this.hasThrownThisTurn) return
 
     const playerIds = Array.from(this.state.players.keys())
     const currentPlayer = this.state.players.get(playerIds[this.state.currentTurn])
