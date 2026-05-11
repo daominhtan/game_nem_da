@@ -29,7 +29,7 @@ export const SPAWN_POSITIONS = {
     player2: { x: 1760, y: 520 }
 };
 export const ENERGY = {
-    base: 2,
+    base: 4,
     bonusPerMissing30Hp: 1,
     maxDisplay: 8
 };

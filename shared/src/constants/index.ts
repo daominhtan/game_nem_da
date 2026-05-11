@@ -33,7 +33,7 @@ export const SPAWN_POSITIONS = {
 }
 
 export const ENERGY = {
-  base: 2,
+  base: 4,
   bonusPerMissing30Hp: 1,
   maxDisplay: 8
 }
