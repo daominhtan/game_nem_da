@@ -7,6 +7,8 @@ export default class PlayerEntity {
         this.statusEffectDuration = 0;
         this.zzzTexts = [];
         this.stunAngle = 0;
+        this._isCrouching = false;
+        this.CROUCH_DURATION = 3000;
         this.playerState = state;
         this.targetX = state.x;
         this.targetY = state.y;
@@ -56,9 +58,17 @@ export default class PlayerEntity {
         this.nameText.setText(this.playerState.name || '');
         this.hpValueText.setPosition(this.sprite.x, this.sprite.y - 62);
         this.hpValueText.setText(`${this.playerState.hp}/${this.playerState.maxHp}`);
+        // Crouch y-offset: push sprite down so it sits on the ground
+        if (this._isCrouching) {
+            this.sprite.y += 18;
+        }
+        // Update crouch indicator position
+        if (this.crouchIndicator) {
+            this.crouchIndicator.setPosition(this.sprite.x, this.sprite.y - 95);
+        }
         // Idle breathing animation (subtle scale oscillation)
         this.breathTime += delta * 0.003;
-        if (this.playerState.animState === 'idle' || !this.playerState.animState) {
+        if (!this._isCrouching && (this.playerState.animState === 'idle' || !this.playerState.animState)) {
             const breathe = 1 + Math.sin(this.breathTime) * 0.015;
             this.sprite.setScale(2 * breathe, 2 / breathe);
         }
@@ -405,6 +415,67 @@ export default class PlayerEntity {
         });
     }
     isAlive() { return this.playerState.isAlive; }
+    startCrouch() {
+        if (this._isCrouching || !this.playerState.isAlive)
+            return;
+        this._isCrouching = true;
+        this.playerState.isCrouching = true;
+        if (this.crouchTween) {
+            this.crouchTween.stop();
+            this.crouchTween = undefined;
+        }
+        const scene = this.sprite.scene;
+        const body = this.sprite.body;
+        body.setSize(36, 32);
+        body.setOffset(14, 40);
+        this.sprite.setTint(0xaaaaff);
+        this.crouchTween = scene.tweens.add({
+            targets: this.sprite,
+            scaleX: 3, scaleY: 1,
+            duration: 120,
+            ease: 'Power2'
+        });
+        if (!this.crouchIndicator) {
+            this.crouchIndicator = scene.add.text(this.sprite.x, this.sprite.y - 95, '🛡️ NẤP', {
+                fontSize: '14px', color: '#88ccff', fontStyle: 'bold',
+                stroke: '#000', strokeThickness: 3
+            }).setOrigin(0.5).setDepth(102);
+        }
+        if (this.crouchTimer) {
+            this.crouchTimer.destroy();
+            this.crouchTimer = undefined;
+        }
+        this.crouchTimer = scene.time.delayedCall(this.CROUCH_DURATION, () => this.stopCrouch());
+    }
+    stopCrouch() {
+        if (!this._isCrouching)
+            return;
+        this._isCrouching = false;
+        this.playerState.isCrouching = false;
+        if (this.crouchTimer) {
+            this.crouchTimer.destroy();
+            this.crouchTimer = undefined;
+        }
+        if (this.crouchTween) {
+            this.crouchTween.stop();
+            this.crouchTween = undefined;
+        }
+        const body = this.sprite.body;
+        body.setSize(36, 64);
+        body.setOffset(14, 8);
+        this.sprite.clearTint();
+        this.crouchTween = this.sprite.scene.tweens.add({
+            targets: this.sprite,
+            scaleX: 2, scaleY: 2,
+            duration: 120,
+            ease: 'Power2'
+        });
+        if (this.crouchIndicator) {
+            this.crouchIndicator.destroy();
+            this.crouchIndicator = undefined;
+        }
+    }
+    isCrouching() { return this._isCrouching; }
     getBody() {
         return this.sprite.body;
     }
@@ -441,6 +512,12 @@ export default class PlayerEntity {
         this.debugRect.destroy();
         this.nameText.destroy();
         this.hpValueText.destroy();
+        if (this.crouchTween)
+            this.crouchTween.stop();
+        if (this.crouchIndicator)
+            this.crouchIndicator.destroy();
+        if (this.crouchTimer)
+            this.crouchTimer.destroy();
         if (this.statusText)
             this.statusText.destroy();
         if (this.statusTimerText)

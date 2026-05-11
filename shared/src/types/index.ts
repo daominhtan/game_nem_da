@@ -10,6 +10,7 @@ export interface PlayerState {
   maxHp: number
   animState: string
   facingLeft: boolean
+  isCrouching: boolean
   statusEffect: string
   statusDuration: number
   kills: number

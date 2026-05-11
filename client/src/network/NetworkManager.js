@@ -151,8 +151,8 @@ export default class NetworkManager {
             handlers.forEach(h => h(data));
         }
     }
-    sendMove(x, y, velocityX, velocityY, facingLeft, animState) {
-        this.room?.send('move', { x, y, velocityX, velocityY, facingLeft, animState });
+    sendMove(x, y, velocityX, velocityY, facingLeft, animState, isCrouching) {
+        this.room?.send('move', { x, y, velocityX, velocityY, facingLeft, animState, isCrouching });
     }
     sendThrow(angle, power, skillId) {
         this.room?.send('throw', { angle, power, skillId });

@@ -13,7 +13,7 @@ export default class GameScene extends Phaser.Scene {
         this.isMyTurn = false;
         this.hasThrownThisTurn = false;
         this.phase = 'waiting';
-        this.moveState = { left: false, right: false, up: false };
+        this.moveState = { left: false, right: false, up: false, down: false };
         this.selectedSkill = 'rock';
         this.skillBarRects = [];
         this.skillBarCreated = false;
@@ -42,7 +42,7 @@ export default class GameScene extends Phaser.Scene {
         this.localEnergy = 0;
         this.lastTurnNumber = -1;
         this.defendStartX = 0;
-        this.moveState = { left: false, right: false, up: false };
+        this.moveState = { left: false, right: false, up: false, down: false };
         this.destroyEnergyDisplay();
     }
     create() {
@@ -403,6 +403,15 @@ export default class GameScene extends Phaser.Scene {
         trackKey(this.wasd.left, 'left');
         trackKey(this.wasd.right, 'right');
         trackKey(this.wasd.up, 'up');
+        // Crouch on down arrow press (defender only)
+        this.cursors.down.on('down', () => {
+            if (!this.isMyTurn && this.phase === 'playing' && this.localEnergy > 0) {
+                const myPlayer = this.players.get(this.myPlayerId);
+                if (myPlayer && myPlayer.isAlive() && !myPlayer.isCrouching()) {
+                    myPlayer.startCrouch();
+                }
+            }
+        });
         this.wasd.t.on('down', () => this.network.sendTaunt());
         const emojiMap = { z: '\u{1F602}', x: '\u{1F621}', c: '\u{1F44D}', v: '\u{1F480}' };
         this.wasd.z.on('down', () => this.network.sendEmoji(emojiMap.z));
@@ -667,31 +676,40 @@ export default class GameScene extends Phaser.Scene {
         // Stunned/sleeping players can't move
         if (isStunned) {
             body.setVelocityX(0);
-            this.network.sendMove(myPlayer.x, myPlayer.y, 0, body.velocity.y, myPlayer.flipX, 'idle');
+            if (myPlayer.isCrouching())
+                myPlayer.stopCrouch();
+            this.network.sendMove(myPlayer.x, myPlayer.y, 0, body.velocity.y, myPlayer.flipX, 'idle', false);
             return;
         }
         const baseSpeed = 180;
         const speed = status === 'slowed' ? baseSpeed * 0.5 : baseSpeed;
         let vx = 0;
+        const isCrouching = myPlayer.isCrouching();
         if (!this.isMyTurn && this.phase === 'playing' && this.localEnergy > 0) {
             if (this.moveState.up && body.onFloor()) {
                 body.setVelocityY(-900);
             }
-            const isLeftSide = myPlayer.x < GAME_CONFIG.worldWidth / 2;
-            const leftLimit = isLeftSide ? 750 : 150;
-            const rightLimit = isLeftSide ? GAME_CONFIG.worldWidth - 150 : 1810;
-            if (this.moveState.left && myPlayer.x > this.defendStartX - this.defendRange && myPlayer.x > leftLimit) {
-                vx = -speed;
+            if (isCrouching) {
+                vx = 0;
             }
-            else if (this.moveState.right && myPlayer.x < this.defendStartX + this.defendRange && myPlayer.x < rightLimit) {
-                vx = speed;
+            else {
+                const isLeftSide = myPlayer.x < GAME_CONFIG.worldWidth / 2;
+                const leftLimit = isLeftSide ? 750 : 150;
+                const rightLimit = isLeftSide ? GAME_CONFIG.worldWidth - 150 : 1810;
+                if (this.moveState.left && myPlayer.x > this.defendStartX - this.defendRange && myPlayer.x > leftLimit) {
+                    vx = -speed;
+                }
+                else if (this.moveState.right && myPlayer.x < this.defendStartX + this.defendRange && myPlayer.x < rightLimit) {
+                    vx = speed;
+                }
             }
         }
         if (vx !== 0) {
             myPlayer.flipX = vx < 0;
         }
         body.setVelocityX(vx);
-        this.network.sendMove(myPlayer.x, myPlayer.y, body.velocity.x, body.velocity.y, myPlayer.flipX, vx !== 0 ? 'run' : 'idle');
+        const anim = isCrouching ? 'crouch' : vx !== 0 ? 'run' : 'idle';
+        this.network.sendMove(myPlayer.x, myPlayer.y, body.velocity.x, body.velocity.y, myPlayer.flipX, anim, isCrouching);
     }
     updateEnergyDisplay() {
         if (!this.energyText) {

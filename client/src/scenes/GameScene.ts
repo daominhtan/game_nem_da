@@ -18,7 +18,7 @@ export default class GameScene extends Phaser.Scene {
   private phase: string = 'waiting'
   private cursors?: Phaser.Types.Input.Keyboard.CursorKeys
   private wasd?: Record<string, Phaser.Input.Keyboard.Key>
-  private moveState: { left: boolean; right: boolean; up: boolean } = { left: false, right: false, up: false }
+  private moveState: { left: boolean; right: boolean; up: boolean; down: boolean } = { left: false, right: false, up: false, down: false }
   private skillKeys?: Phaser.Input.Keyboard.Key[]
   private syncTimer?: Phaser.Time.TimerEvent
   private selectedSkill: string = 'rock'
@@ -63,7 +63,7 @@ export default class GameScene extends Phaser.Scene {
     this.localEnergy = 0
     this.lastTurnNumber = -1
     this.defendStartX = 0
-    this.moveState = { left: false, right: false, up: false }
+    this.moveState = { left: false, right: false, up: false, down: false }
     this.destroyEnergyDisplay()
   }
 
@@ -482,7 +482,7 @@ export default class GameScene extends Phaser.Scene {
       v: this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.V)
     }
 
-    const trackKey = (key: Phaser.Input.Keyboard.Key, direction: 'left' | 'right' | 'up') => {
+    const trackKey = (key: Phaser.Input.Keyboard.Key, direction: 'left' | 'right' | 'up' | 'down') => {
       key.on('down', () => {
         this.moveState[direction] = true
       })
@@ -497,6 +497,16 @@ export default class GameScene extends Phaser.Scene {
     trackKey(this.wasd!.left, 'left')
     trackKey(this.wasd!.right, 'right')
     trackKey(this.wasd!.up, 'up')
+
+    // Crouch on down arrow press (defender only)
+    this.cursors!.down.on('down', () => {
+      if (!this.isMyTurn && this.phase === 'playing' && this.localEnergy > 0) {
+        const myPlayer = this.players.get(this.myPlayerId)
+        if (myPlayer && myPlayer.isAlive() && !myPlayer.isCrouching()) {
+          myPlayer.startCrouch()
+        }
+      }
+    })
 
     this.wasd!.t.on('down', () => this.network.sendTaunt())
 
@@ -780,25 +790,31 @@ export default class GameScene extends Phaser.Scene {
     // Stunned/sleeping players can't move
     if (isStunned) {
       body.setVelocityX(0)
-      this.network.sendMove(myPlayer.x, myPlayer.y, 0, body.velocity.y, myPlayer.flipX, 'idle')
+      if (myPlayer.isCrouching()) myPlayer.stopCrouch()
+      this.network.sendMove(myPlayer.x, myPlayer.y, 0, body.velocity.y, myPlayer.flipX, 'idle', false)
       return
     }
 
     const baseSpeed = 180
     const speed = status === 'slowed' ? baseSpeed * 0.5 : baseSpeed
     let vx = 0
+    const isCrouching = myPlayer.isCrouching()
 
     if (!this.isMyTurn && this.phase === 'playing' && this.localEnergy > 0) {
       if (this.moveState.up && body.onFloor()) {
         body.setVelocityY(-900)
       }
-      const isLeftSide = myPlayer.x < GAME_CONFIG.worldWidth / 2
-      const leftLimit = isLeftSide ? 750 : 150
-      const rightLimit = isLeftSide ? GAME_CONFIG.worldWidth - 150 : 1810
-      if (this.moveState.left && myPlayer.x > this.defendStartX - this.defendRange && myPlayer.x > leftLimit) {
-        vx = -speed
-      } else if (this.moveState.right && myPlayer.x < this.defendStartX + this.defendRange && myPlayer.x < rightLimit) {
-        vx = speed
+      if (isCrouching) {
+        vx = 0
+      } else {
+        const isLeftSide = myPlayer.x < GAME_CONFIG.worldWidth / 2
+        const leftLimit = isLeftSide ? 750 : 150
+        const rightLimit = isLeftSide ? GAME_CONFIG.worldWidth - 150 : 1810
+        if (this.moveState.left && myPlayer.x > this.defendStartX - this.defendRange && myPlayer.x > leftLimit) {
+          vx = -speed
+        } else if (this.moveState.right && myPlayer.x < this.defendStartX + this.defendRange && myPlayer.x < rightLimit) {
+          vx = speed
+        }
       }
     }
 
@@ -808,7 +824,8 @@ export default class GameScene extends Phaser.Scene {
 
     body.setVelocityX(vx)
 
-    this.network.sendMove(myPlayer.x, myPlayer.y, body.velocity.x, body.velocity.y, myPlayer.flipX, vx !== 0 ? 'run' : 'idle')
+    const anim = isCrouching ? 'crouch' : vx !== 0 ? 'run' : 'idle'
+    this.network.sendMove(myPlayer.x, myPlayer.y, body.velocity.x, body.velocity.y, myPlayer.flipX, anim, isCrouching)
   }
 
   private updateEnergyDisplay() {

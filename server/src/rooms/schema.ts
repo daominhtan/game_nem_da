@@ -18,6 +18,7 @@ export class PlayerSchema extends Schema {
   @type("uint8") deaths = 0
   @type("uint8") energy = 3
   @type("boolean") isAlive = true
+  @type("boolean") isCrouching = false
 }
 
 export class ProjectileSchema extends Schema {

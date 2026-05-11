@@ -62,6 +62,7 @@ export class GameRoom extends Room<GameRoomSchema> {
         player.velocityY = data.velocityY || 0
         player.facingLeft = data.facingLeft || false
         player.animState = data.animState || "idle"
+        player.isCrouching = data.isCrouching || false
       }
     })
 
@@ -291,10 +292,11 @@ const velocityY = Math.sin(radians) * power * THROW_SPEED
       let hit = false
       for (const [playerId, player] of this.state.players) {
         if (playerId === projectile.ownerId || !player.isAlive) continue
+        const hitRadius = player.isCrouching ? PLAYER_HIT_RADIUS * 0.5 : PLAYER_HIT_RADIUS
         const dist = Math.sqrt(
           Math.pow(projectile.x - player.x, 2) + Math.pow(projectile.y - player.y, 2)
         )
-        if (dist < PLAYER_HIT_RADIUS) {
+        if (dist < hitRadius) {
           this.handleProjectileHit(projectile, player)
           hit = true
           break
@@ -306,7 +308,7 @@ const velocityY = Math.sin(radians) * power * THROW_SPEED
           const sx = projectile.x - stepVx * s
           const sy = projectile.y - stepVy * s
           const sd = Math.sqrt(Math.pow(sx - player.x, 2) + Math.pow(sy - player.y, 2))
-          if (sd < PLAYER_HIT_RADIUS) {
+          if (sd < hitRadius) {
             this.handleProjectileHit(projectile, player)
             hit = true
             break

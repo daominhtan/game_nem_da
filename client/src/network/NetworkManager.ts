@@ -179,8 +179,8 @@ export default class NetworkManager {
     }
   }
 
-  sendMove(x: number, y: number, velocityX: number, velocityY: number, facingLeft: boolean, animState: string) {
-    this.room?.send('move', { x, y, velocityX, velocityY, facingLeft, animState })
+  sendMove(x: number, y: number, velocityX: number, velocityY: number, facingLeft: boolean, animState: string, isCrouching?: boolean) {
+    this.room?.send('move', { x, y, velocityX, velocityY, facingLeft, animState, isCrouching })
   }
 
   sendThrow(angle: number, power: number, skillId: string) {
