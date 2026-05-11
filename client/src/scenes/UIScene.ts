@@ -46,6 +46,8 @@ export default class UIScene extends Phaser.Scene {
   private barCreated: boolean = false
   private p1NameText?: Phaser.GameObjects.Text
   private p2NameText?: Phaser.GameObjects.Text
+  private p1HpValueText?: Phaser.GameObjects.Text
+  private p2HpValueText?: Phaser.GameObjects.Text
 
   constructor() {
     super('UIScene')
@@ -82,10 +84,20 @@ export default class UIScene extends Phaser.Scene {
       fontSize: '18px', color: '#ffffff', stroke: '#000', strokeThickness: 3
     }).setDepth(1000)
 
+    this.p1HpValueText = this.add.text(230, 47, '', {
+      fontSize: '13px', color: '#ffffff', fontStyle: 'bold',
+      stroke: '#000', strokeThickness: 3
+    }).setDepth(1000)
+
     this.p2HpBar = this.add.graphics().setDepth(1000)
     this.p2NameText = this.add.text(width - 20, 20, 'Player 2', {
       fontSize: '18px', color: '#F44336', stroke: '#000', strokeThickness: 3
     }).setOrigin(1, 0).setDepth(1000)
+
+    this.p2HpValueText = this.add.text(width - 230, 47, '', {
+      fontSize: '13px', color: '#ffffff', fontStyle: 'bold',
+      stroke: '#000', strokeThickness: 3
+    }).setDepth(1000)
 
     this.p1EnergyPips = this.add.graphics().setDepth(1000)
     this.p2EnergyPips = this.add.graphics().setDepth(1000)
@@ -409,6 +421,15 @@ export default class UIScene extends Phaser.Scene {
         200 * p2HpPercent,
         15
       )
+    }
+
+    if (this.p1HpValueText) {
+      const p1 = players[0]
+      this.p1HpValueText.setText(`${p1.hp}/${p1.maxHp}`)
+    }
+    if (this.p2HpValueText) {
+      const p2 = players[1]
+      this.p2HpValueText.setText(`${p2.hp}/${p2.maxHp}`)
     }
   }
 

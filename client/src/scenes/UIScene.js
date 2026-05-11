@@ -48,10 +48,18 @@ export default class UIScene extends Phaser.Scene {
         this.p1NameText = this.add.text(20, 20, 'Player 1', {
             fontSize: '18px', color: '#ffffff', stroke: '#000', strokeThickness: 3
         }).setDepth(1000);
+        this.p1HpValueText = this.add.text(230, 47, '', {
+            fontSize: '13px', color: '#ffffff', fontStyle: 'bold',
+            stroke: '#000', strokeThickness: 3
+        }).setDepth(1000);
         this.p2HpBar = this.add.graphics().setDepth(1000);
         this.p2NameText = this.add.text(width - 20, 20, 'Player 2', {
             fontSize: '18px', color: '#F44336', stroke: '#000', strokeThickness: 3
         }).setOrigin(1, 0).setDepth(1000);
+        this.p2HpValueText = this.add.text(width - 230, 47, '', {
+            fontSize: '13px', color: '#ffffff', fontStyle: 'bold',
+            stroke: '#000', strokeThickness: 3
+        }).setDepth(1000);
         this.p1EnergyPips = this.add.graphics().setDepth(1000);
         this.p2EnergyPips = this.add.graphics().setDepth(1000);
         this.p1EnergyLabel = this.add.text(20, 62, '', {
@@ -341,6 +349,14 @@ export default class UIScene extends Phaser.Scene {
             this.p2HpBar.fillRect(this.cameras.main.width - 220, 45, 200, 15);
             this.p2HpBar.fillStyle(this.getHPColor(p2HpPercent), 1);
             this.p2HpBar.fillRect(this.cameras.main.width - 220 + (200 * (1 - p2HpPercent)), 45, 200 * p2HpPercent, 15);
+        }
+        if (this.p1HpValueText) {
+            const p1 = players[0];
+            this.p1HpValueText.setText(`${p1.hp}/${p1.maxHp}`);
+        }
+        if (this.p2HpValueText) {
+            const p2 = players[1];
+            this.p2HpValueText.setText(`${p2.hp}/${p2.maxHp}`);
         }
     }
     updateEnergyBars() {
