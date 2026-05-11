@@ -164,16 +164,26 @@ export default class MenuScene extends Phaser.Scene {
     const { width, height } = this.cameras.main
     this.inputCode = ''
 
-    // Show code input UI
+    const cleanup = () => {
+      window.removeEventListener('keydown', keyHandler)
+      window.removeEventListener('paste', pasteHandler)
+      overlay.destroy()
+      inputBg.destroy()
+      this.codeInput?.destroy()
+      confirmBtn.destroy()
+      title.destroy()
+    }
+
+    const displayCode = () => {
+      if (this.codeInput) {
+        const display = this.inputCode + '_'.repeat(Math.max(0, 6 - this.inputCode.length))
+        this.codeInput.setText(display)
+      }
+    }
+
     const overlay = this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.7)
       .setInteractive()
-      .on('pointerdown', () => {
-        overlay.destroy()
-        inputBg.destroy()
-        this.codeInput?.destroy()
-        confirmBtn.destroy()
-        title.destroy()
-      })
+      .on('pointerdown', cleanup)
 
     const title = this.add.text(width / 2, height / 2 - 100, 'NHẬP MÃ PHÒNG', {
       fontSize: '28px', color: '#fff', fontStyle: 'bold',
@@ -192,38 +202,36 @@ export default class MenuScene extends Phaser.Scene {
       padding: { x: 20, y: 10 }
     }).setOrigin(0.5).setInteractive({ useHandCursor: true }).setDepth(10)
 
-    // Keyboard input for room code
     const keyHandler = (event: KeyboardEvent) => {
+      if (event.ctrlKey || event.metaKey) return
       const key = event.key.toUpperCase()
       if (key === 'ENTER' && this.inputCode.length >= 4) {
-        window.removeEventListener('keydown', keyHandler)
-        overlay.destroy()
-        inputBg.destroy()
-        this.codeInput?.destroy()
-        confirmBtn.destroy()
-        title.destroy()
+        cleanup()
         this.doJoinByCode(this.inputCode)
       } else if (key === 'BACKSPACE') {
         this.inputCode = this.inputCode.slice(0, -1)
       } else if (/^[A-Z0-9]$/.test(key) && this.inputCode.length < 6) {
         this.inputCode += key
       }
-      if (this.codeInput) {
-        const display = this.inputCode + '_'.repeat(Math.max(0, 6 - this.inputCode.length))
-        this.codeInput.setText(display)
+      displayCode()
+    }
+
+    const pasteHandler = (event: ClipboardEvent) => {
+      const text = (event.clipboardData || (window as any).clipboardData).getData('text')
+      const clean = text.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6)
+      if (clean) {
+        event.preventDefault()
+        this.inputCode = clean
+        displayCode()
       }
     }
 
     window.addEventListener('keydown', keyHandler)
+    window.addEventListener('paste', pasteHandler)
 
     confirmBtn.on('pointerdown', () => {
       if (this.inputCode.length >= 4) {
-        window.removeEventListener('keydown', keyHandler)
-        overlay.destroy()
-        inputBg.destroy()
-        this.codeInput?.destroy()
-        confirmBtn.destroy()
-        title.destroy()
+        cleanup()
         this.doJoinByCode(this.inputCode)
       }
     })
