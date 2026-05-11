@@ -4,6 +4,7 @@ export default class NetworkManager {
     constructor() {
         this.messageHandlers = new Map();
         this._isBotMatch = false;
+        this.playerName = '';
         const serverUrl = import.meta.env.VITE_SERVER_URL || 'ws://localhost:2567';
         this.client = new Client(serverUrl);
     }
@@ -60,7 +61,7 @@ export default class NetworkManager {
     }
     async joinRoomById(roomId) {
         this.leaveRoom();
-        this.room = await this.client.joinById(roomId);
+        this.room = await this.client.joinById(roomId, { playerName: this.playerName });
         this.setupRoomHandlers();
         return this.room;
     }

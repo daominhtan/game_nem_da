@@ -4,6 +4,7 @@ export default class MenuScene extends Phaser.Scene {
     constructor() {
         super('MenuScene');
         this.inputCode = '';
+        this.playerName = '';
         this.network = NetworkManager.getInstance();
     }
     create() {
@@ -13,6 +14,19 @@ export default class MenuScene extends Phaser.Scene {
             fontSize: '48px', color: '#fff',
             stroke: '#000', strokeThickness: 6
         }).setOrigin(0.5);
+        // Name input section
+        this.add.text(width / 2, height / 2 - 150, 'TÊN CỦA BẠN', {
+            fontSize: '18px', color: '#aaa',
+            stroke: '#000', strokeThickness: 2
+        }).setOrigin(0.5);
+        const nameBg = this.add.rectangle(width / 2, height / 2 - 115, 300, 40, 0x222222)
+            .setStrokeStyle(2, 0x666666);
+        this.playerName = this.network.playerName || '';
+        const nameDisplay = this.add.text(width / 2, height / 2 - 115, this.playerName || 'Nhập tên...', {
+            fontSize: '20px', color: this.playerName ? '#fff' : '#666'
+        }).setOrigin(0.5);
+        nameBg.setInteractive({ useHandCursor: true });
+        nameBg.on('pointerdown', () => this.showNameInput(nameDisplay, height));
         // Status text (hidden by default)
         this.statusText = this.add.text(width / 2, height - 180, '', {
             fontSize: '18px', color: '#ffaa00'
@@ -24,6 +38,73 @@ export default class MenuScene extends Phaser.Scene {
         }).setOrigin(0.5).setVisible(false);
         // Create buttons
         this.createMainMenu(width, height);
+    }
+    showNameInput(nameDisplay, height) {
+        let input = this.playerName || '';
+        const overlay = this.add.rectangle(this.cameras.main.width / 2, height / 2, this.cameras.main.width, height, 0x000000, 0.7).setInteractive().setDepth(20);
+        const title = this.add.text(this.cameras.main.width / 2, height / 2 - 80, 'NHẬP TÊN', {
+            fontSize: '24px', color: '#fff', fontStyle: 'bold',
+            stroke: '#000', strokeThickness: 4
+        }).setOrigin(0.5).setDepth(21);
+        const inpBg = this.add.rectangle(this.cameras.main.width / 2, height / 2 - 20, 300, 45, 0x333333)
+            .setStrokeStyle(2, 0xffffff).setDepth(21);
+        const inpText = this.add.text(this.cameras.main.width / 2, height / 2 - 20, input || '______', {
+            fontSize: '24px', color: '#fff'
+        }).setOrigin(0.5).setDepth(22);
+        const confirmBtn = this.add.text(this.cameras.main.width / 2, height / 2 + 50, 'XÁC NHẬN', {
+            fontSize: '22px', color: '#fff', backgroundColor: '#4CAF50',
+            padding: { x: 20, y: 10 }
+        }).setOrigin(0.5).setInteractive({ useHandCursor: true }).setDepth(21);
+        const displayInput = () => {
+            inpText.setText(input || 'Nhập tên...');
+            inpText.setColor(input ? '#fff' : '#666');
+        };
+        const cleanup = () => {
+            window.removeEventListener('keydown', keyHandler);
+            overlay.destroy();
+            inpBg.destroy();
+            inpText.destroy();
+            confirmBtn.destroy();
+            title.destroy();
+        };
+        const keyHandler = (e) => {
+            if (e.key === 'Enter') {
+                if (input.trim()) {
+                    this.playerName = input.trim();
+                    this.network.playerName = this.playerName;
+                    nameDisplay.setText(this.playerName);
+                    nameDisplay.setColor('#fff');
+                }
+                cleanup();
+            }
+            else if (e.key === 'Backspace') {
+                input = input.slice(0, -1);
+            }
+            else if (e.key.length === 1 && input.length < 20 && !e.ctrlKey && !e.metaKey) {
+                input += e.key;
+            }
+            displayInput();
+        };
+        const pasteHandler = (e) => {
+            const text = (e.clipboardData || window.clipboardData).getData('text');
+            if (text) {
+                e.preventDefault();
+                input = (input + text).slice(0, 20);
+                displayInput();
+            }
+        };
+        window.addEventListener('keydown', keyHandler);
+        window.addEventListener('paste', pasteHandler);
+        overlay.on('pointerdown', cleanup);
+        confirmBtn.on('pointerdown', () => {
+            if (input.trim()) {
+                this.playerName = input.trim();
+                this.network.playerName = this.playerName;
+                nameDisplay.setText(this.playerName);
+                nameDisplay.setColor('#fff');
+            }
+            cleanup();
+        });
     }
     createMainMenu(width, height) {
         const findBtn = this.add.text(width / 2, height / 2 - 60, 'TÌM TRẬN', {

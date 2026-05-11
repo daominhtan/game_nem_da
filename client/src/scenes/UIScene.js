@@ -45,12 +45,12 @@ export default class UIScene extends Phaser.Scene {
             fontSize: '20px', color: '#ffffff'
         }).setOrigin(0.5).setDepth(1000);
         this.p1HpBar = this.add.graphics().setDepth(1000);
-        this.add.text(20, 20, 'Player 1', {
-            fontSize: '18px', color: '#2196F3'
+        this.p1NameText = this.add.text(20, 20, 'Player 1', {
+            fontSize: '18px', color: '#ffffff', stroke: '#000', strokeThickness: 3
         }).setDepth(1000);
         this.p2HpBar = this.add.graphics().setDepth(1000);
-        this.add.text(width - 20, 20, 'Player 2', {
-            fontSize: '18px', color: '#F44336'
+        this.p2NameText = this.add.text(width - 20, 20, 'Player 2', {
+            fontSize: '18px', color: '#F44336', stroke: '#000', strokeThickness: 3
         }).setOrigin(1, 0).setDepth(1000);
         this.p1EnergyPips = this.add.graphics().setDepth(1000);
         this.p2EnergyPips = this.add.graphics().setDepth(1000);
@@ -271,6 +271,7 @@ export default class UIScene extends Phaser.Scene {
         this.updateSkillCooldowns();
         this.updateHPBars();
         this.updateEnergyBars();
+        this.updatePlayerNames();
         this.updateRoundIndicators(state);
     }
     updateSkillCooldowns() {
@@ -370,6 +371,20 @@ export default class UIScene extends Phaser.Scene {
             const w = this.cameras.main.width;
             drawPips(this.p2EnergyPips, w - 20, 68, p2.energy, maxEnergy);
             this.p2EnergyLabel.setText(`NL: ${p2.energy}`);
+        }
+    }
+    updatePlayerNames() {
+        const room = this.network.getRoom();
+        if (!room || !room.state)
+            return;
+        const players = Array.from(room.state.players.values());
+        if (players.length < 2)
+            return;
+        if (this.p1NameText) {
+            this.p1NameText.setText(players[0].name || `Player 1`);
+        }
+        if (this.p2NameText) {
+            this.p2NameText.setText(players[1].name || `Player 2`);
         }
     }
     getHPColor(percent) {

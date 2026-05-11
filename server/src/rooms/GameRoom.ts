@@ -110,6 +110,7 @@ export class GameRoom extends Room<GameRoomSchema> {
 
     const player = new PlayerSchema()
     player.id = client.sessionId
+    player.name = options.playerName || `Player ${this.state.players.size + 1}`
 
     // Spawn positions
     const playerIndex = this.state.players.size

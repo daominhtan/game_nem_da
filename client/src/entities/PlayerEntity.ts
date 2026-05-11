@@ -5,6 +5,8 @@ export default class PlayerEntity {
   public sprite: Phaser.Physics.Arcade.Sprite
   public hpBarGreen: Phaser.GameObjects.Graphics
   public hpBarYellow: Phaser.GameObjects.Graphics
+  public nameText: Phaser.GameObjects.Text
+  public hpValueText: Phaser.GameObjects.Text
   private playerState: PlayerState
   private targetX: number
   private targetY: number
@@ -50,6 +52,16 @@ export default class PlayerEntity {
 
     this.debugRect = scene.add.rectangle(state.x, state.y, 64, 80, 0xff0000, 0.3).setDepth(49)
 
+    this.nameText = scene.add.text(state.x, state.y - 85, state.name || '', {
+      fontSize: '14px', color: '#ffffff', fontStyle: 'bold',
+      stroke: '#000', strokeThickness: 3
+    }).setOrigin(0.5).setDepth(101)
+
+    this.hpValueText = scene.add.text(state.x, state.y - 62, ``, {
+      fontSize: '11px', color: '#ffffff', fontStyle: 'bold',
+      stroke: '#000', strokeThickness: 2
+    }).setOrigin(0.5).setDepth(101)
+
     const initialFacingLeft = (state.x || 0) > 1280
     this.sprite.setFlipX(initialFacingLeft)
     this.playerState.facingLeft = initialFacingLeft
@@ -71,6 +83,12 @@ export default class PlayerEntity {
     if (this.statusTimerText) {
       this.statusTimerText.setPosition(this.sprite.x, this.sprite.y - 90)
     }
+
+    // Update name & HP text position
+    this.nameText.setPosition(this.sprite.x, this.sprite.y - 85)
+    this.nameText.setText(this.playerState.name || '')
+    this.hpValueText.setPosition(this.sprite.x, this.sprite.y - 62)
+    this.hpValueText.setText(`${this.playerState.hp}/${this.playerState.maxHp}`)
 
     // Idle breathing animation (subtle scale oscillation)
     this.breathTime += delta * 0.003
@@ -492,6 +510,8 @@ export default class PlayerEntity {
     this.hpBarGreen.destroy()
     this.hpBarYellow.destroy()
     this.debugRect.destroy()
+    this.nameText.destroy()
+    this.hpValueText.destroy()
     if (this.statusText) this.statusText.destroy()
     if (this.statusTimerText) this.statusTimerText.destroy()
     if (this.statusTimer) this.statusTimer.destroy()

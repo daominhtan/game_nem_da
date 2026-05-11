@@ -10,6 +10,7 @@ export default class NetworkManager {
   private room?: Room
   private messageHandlers: Map<string, MessageHandler[]> = new Map()
   private _isBotMatch: boolean = false
+  public playerName: string = ''
 
   private constructor() {
     const serverUrl = (import.meta as any).env.VITE_SERVER_URL || 'ws://localhost:2567'
@@ -74,7 +75,7 @@ export default class NetworkManager {
 
   async joinRoomById(roomId: string) {
     this.leaveRoom()
-    this.room = await this.client.joinById(roomId)
+    this.room = await this.client.joinById(roomId, { playerName: this.playerName })
     this.setupRoomHandlers()
     return this.room
   }
