@@ -5,9 +5,17 @@ export default class MenuScene extends Phaser.Scene {
         super('MenuScene');
         this.inputCode = '';
         this.playerName = '';
+        this.menuHandlers = [];
         this.network = NetworkManager.getInstance();
     }
+    cleanupHandlers() {
+        for (const { event, handler } of this.menuHandlers) {
+            this.network.off(event, handler);
+        }
+        this.menuHandlers = [];
+    }
     create() {
+        this.cleanupHandlers();
         const { width, height } = this.cameras.main;
         this.add.image(width / 2, height / 2, 'bg_menu');
         this.add.text(width / 2, 60, 'NÉM ĐÁ ONLINE', {
@@ -28,11 +36,11 @@ export default class MenuScene extends Phaser.Scene {
         nameBg.setInteractive({ useHandCursor: true });
         nameBg.on('pointerdown', () => this.showNameInput(nameDisplay, height));
         // Status text (hidden by default)
-        this.statusText = this.add.text(width / 2, height - 180, '', {
+        this.statusText = this.add.text(width / 2, height - 100, '', {
             fontSize: '18px', color: '#ffaa00'
         }).setOrigin(0.5).setVisible(false);
         // Room code display (hidden by default)
-        this.roomCodeText = this.add.text(width / 2, height - 220, '', {
+        this.roomCodeText = this.add.text(width / 2, height - 140, '', {
             fontSize: '28px', color: '#ffeb3b', fontStyle: 'bold',
             stroke: '#000', strokeThickness: 4
         }).setOrigin(0.5).setVisible(false);
@@ -115,15 +123,20 @@ export default class MenuScene extends Phaser.Scene {
             fontSize: '26px', color: '#fff', backgroundColor: '#2196F3',
             padding: { x: 24, y: 12 }
         }).setOrigin(0.5).setInteractive({ useHandCursor: true });
-        const joinBtn = this.add.text(width / 2, height / 2 + 100, 'THAM GIA PHÒNG', {
+        const botBtn = this.add.text(width / 2, height / 2 + 100, 'CHƠI VỚI BOT', {
+            fontSize: '26px', color: '#fff', backgroundColor: '#9C27B0',
+            padding: { x: 24, y: 12 }
+        }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+        const joinBtn = this.add.text(width / 2, height / 2 + 170, 'THAM GIA PHÒNG', {
             fontSize: '26px', color: '#fff', backgroundColor: '#FF9800',
             padding: { x: 24, y: 12 }
         }).setOrigin(0.5).setInteractive({ useHandCursor: true });
         findBtn.on('pointerdown', () => this.onFindMatch());
         createBtn.on('pointerdown', () => this.onCreateRoom());
+        botBtn.on('pointerdown', () => this.onPlayBot());
         joinBtn.on('pointerdown', () => this.onJoinRoom());
         // Hover effects
-        const buttons = [findBtn, createBtn, joinBtn];
+        const buttons = [findBtn, createBtn, botBtn, joinBtn];
         buttons.forEach(btn => {
             btn.on('pointerover', () => btn.setAlpha(0.8));
             btn.on('pointerout', () => btn.setAlpha(1));
@@ -138,40 +151,68 @@ export default class MenuScene extends Phaser.Scene {
         this.showStatus('Đang tìm trận...');
         try {
             await this.network.joinMatchmaking();
-            this.network.on('queueUpdate', (data) => {
+            const onQueueUpdate = (data) => {
                 this.showStatus(`Đang chờ người chơi... (${data.position}/2)`);
-            });
-            this.network.on('matchFound', () => {
-                this.network.off('matchFound', () => { });
-                this.network.off('queueUpdate', () => { });
+            };
+            const onMatchFound = () => {
+                this.network.off('matchFound', onMatchFound);
+                this.network.off('queueUpdate', onQueueUpdate);
                 this.showStatus('Đã tìm thấy đối thủ!');
                 this.scene.start('CharacterSelectScene');
-            });
-            this.network.on('networkError', (data) => {
+            };
+            const onNetworkError = (data) => {
                 this.showStatus(data.message || 'Lỗi kết nối!');
-            });
+            };
+            this.network.on('queueUpdate', onQueueUpdate);
+            this.network.on('matchFound', onMatchFound);
+            this.network.on('networkError', onNetworkError);
+            this.menuHandlers.push({ event: 'queueUpdate', handler: onQueueUpdate }, { event: 'matchFound', handler: onMatchFound }, { event: 'networkError', handler: onNetworkError });
         }
         catch (err) {
             this.showStatus('Lỗi kết nối! Thử lại.');
+        }
+    }
+    async onPlayBot() {
+        this.showStatus('Đang tạo trận với Bot...');
+        try {
+            await this.network.playWithBot();
+            const onMatchFound = () => {
+                this.network.off('matchFound', onMatchFound);
+                this.showStatus('Đã vào trận với Bot!');
+                this.scene.start('CharacterSelectScene');
+            };
+            const onNetworkError = (data) => {
+                this.showStatus(data.message || 'Lỗi kết nối!');
+            };
+            this.network.on('matchFound', onMatchFound);
+            this.network.on('networkError', onNetworkError);
+            this.menuHandlers.push({ event: 'matchFound', handler: onMatchFound }, { event: 'networkError', handler: onNetworkError });
+        }
+        catch (err) {
+            this.showStatus('Lỗi kết nối!');
         }
     }
     async onCreateRoom() {
         this.showStatus('Đang tạo phòng...');
         try {
             await this.network.createPrivateRoom();
-            this.network.on('roomCreated', (data) => {
+            const onRoomCreated = (data) => {
                 this.showRoomCode(data.code);
                 this.showStatus('Đang chờ người tham gia...');
-            });
-            this.network.on('networkError', (data) => {
+            };
+            const onNetworkError = (data) => {
                 this.showStatus(data.message || 'Lỗi tạo phòng!');
-            });
-            this.network.on('phaseChange', (data) => {
+            };
+            const onPhaseChange = (data) => {
                 if (data.current === 'selecting' || data.current === 'countdown' || data.current === 'playing') {
                     this.showStatus('Đã có người tham gia!');
                     this.scene.start('CharacterSelectScene');
                 }
-            });
+            };
+            this.network.on('roomCreated', onRoomCreated);
+            this.network.on('networkError', onNetworkError);
+            this.network.on('phaseChange', onPhaseChange);
+            this.menuHandlers.push({ event: 'roomCreated', handler: onRoomCreated }, { event: 'networkError', handler: onNetworkError }, { event: 'phaseChange', handler: onPhaseChange });
         }
         catch (err) {
             this.showStatus('Lỗi kết nối!');
@@ -288,14 +329,17 @@ export default class MenuScene extends Phaser.Scene {
         this.showStatus('Đang tham gia phòng...');
         try {
             await this.network.joinByCode(code);
-            this.network.on('matchFound', () => {
-                this.network.off('matchFound', () => { });
+            const onMatchFound = () => {
+                this.network.off('matchFound', onMatchFound);
                 this.showStatus('Đã vào phòng!');
                 this.scene.start('CharacterSelectScene');
-            });
-            this.network.on('networkError', (data) => {
+            };
+            const onNetworkError = (data) => {
                 this.showStatus(data.message || 'Mã phòng không hợp lệ!');
-            });
+            };
+            this.network.on('matchFound', onMatchFound);
+            this.network.on('networkError', onNetworkError);
+            this.menuHandlers.push({ event: 'matchFound', handler: onMatchFound }, { event: 'networkError', handler: onNetworkError });
         }
         catch (err) {
             this.showStatus('Không tìm thấy phòng!');

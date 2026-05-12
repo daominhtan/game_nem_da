@@ -47,6 +47,8 @@ export class MatchmakingRoom extends Room {
       this.handleCreateRoom(client)
     } else if (options?.action === 'joinByCode' && options?.code) {
       this.handleJoinByCode(client, options.code)
+    } else if (options?.action === 'playBot') {
+      this.createBotMatchForClient(client)
     } else {
       this.addToQueue(client)
       client.send('queueUpdate', { position: this.joinQueue.length })
@@ -110,6 +112,17 @@ export class MatchmakingRoom extends Room {
     } catch (err) {
       console.error('[Matchmaking] Failed to create bot match:', err)
       if (client) this.addToQueue(client)
+    }
+  }
+
+  private async createBotMatchForClient(client: Client) {
+    try {
+      const reservation = await matchMaker.create('game_room', { botMode: true })
+      const roomId = reservation.room.roomId
+      client.send('matchFound', { roomId, isBotMatch: true })
+    } catch (err) {
+      console.error('[Matchmaking] Failed to create bot match:', err)
+      client.send('error', { message: 'Không thể tạo bot match!' })
     }
   }
 

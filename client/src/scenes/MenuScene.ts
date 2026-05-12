@@ -51,12 +51,12 @@ export default class MenuScene extends Phaser.Scene {
     nameBg.on('pointerdown', () => this.showNameInput(nameDisplay, height))
 
     // Status text (hidden by default)
-    this.statusText = this.add.text(width / 2, height - 180, '', {
+    this.statusText = this.add.text(width / 2, height - 100, '', {
       fontSize: '18px', color: '#ffaa00'
     }).setOrigin(0.5).setVisible(false)
 
     // Room code display (hidden by default)
-    this.roomCodeText = this.add.text(width / 2, height - 220, '', {
+    this.roomCodeText = this.add.text(width / 2, height - 140, '', {
       fontSize: '28px', color: '#ffeb3b', fontStyle: 'bold',
       stroke: '#000', strokeThickness: 4
     }).setOrigin(0.5).setVisible(false)
@@ -152,17 +152,23 @@ export default class MenuScene extends Phaser.Scene {
       padding: { x: 24, y: 12 }
     }).setOrigin(0.5).setInteractive({ useHandCursor: true })
 
-    const joinBtn = this.add.text(width / 2, height / 2 + 100, 'THAM GIA PHÒNG', {
+    const botBtn = this.add.text(width / 2, height / 2 + 100, 'CHƠI VỚI BOT', {
+      fontSize: '26px', color: '#fff', backgroundColor: '#9C27B0',
+      padding: { x: 24, y: 12 }
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true })
+
+    const joinBtn = this.add.text(width / 2, height / 2 + 170, 'THAM GIA PHÒNG', {
       fontSize: '26px', color: '#fff', backgroundColor: '#FF9800',
       padding: { x: 24, y: 12 }
     }).setOrigin(0.5).setInteractive({ useHandCursor: true })
 
     findBtn.on('pointerdown', () => this.onFindMatch())
     createBtn.on('pointerdown', () => this.onCreateRoom())
+    botBtn.on('pointerdown', () => this.onPlayBot())
     joinBtn.on('pointerdown', () => this.onJoinRoom())
 
     // Hover effects
-    const buttons = [findBtn, createBtn, joinBtn]
+    const buttons = [findBtn, createBtn, botBtn, joinBtn]
     buttons.forEach(btn => {
       btn.on('pointerover', () => btn.setAlpha(0.8))
       btn.on('pointerout', () => btn.setAlpha(1))
@@ -203,6 +209,31 @@ export default class MenuScene extends Phaser.Scene {
       )
     } catch (err) {
       this.showStatus('Lỗi kết nối! Thử lại.')
+    }
+  }
+
+  private async onPlayBot() {
+    this.showStatus('Đang tạo trận với Bot...')
+    try {
+      await this.network.playWithBot()
+
+      const onMatchFound = () => {
+        this.network.off('matchFound', onMatchFound)
+        this.showStatus('Đã vào trận với Bot!')
+        this.scene.start('CharacterSelectScene')
+      }
+      const onNetworkError = (data: any) => {
+        this.showStatus(data.message || 'Lỗi kết nối!')
+      }
+
+      this.network.on('matchFound', onMatchFound)
+      this.network.on('networkError', onNetworkError)
+      this.menuHandlers.push(
+        { event: 'matchFound', handler: onMatchFound },
+        { event: 'networkError', handler: onNetworkError }
+      )
+    } catch (err) {
+      this.showStatus('Lỗi kết nối!')
     }
   }
 

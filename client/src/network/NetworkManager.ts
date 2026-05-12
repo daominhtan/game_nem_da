@@ -111,6 +111,29 @@ export default class NetworkManager {
     return this.room
   }
 
+  async playWithBot() {
+    this.leaveRoom()
+    this._isBotMatch = true
+    this.room = await this.client.joinOrCreate('matchmaking_room', {
+      action: 'playBot'
+    })
+
+    this.room.onMessage('matchFound', async (data) => {
+      try {
+        await this.joinRoomById(data.roomId)
+        this.emit('matchFound', data)
+      } catch (err) {
+        this.emit('networkError', { message: (err as Error)?.message || 'Không thể vào trận bot!' })
+      }
+    })
+
+    this.room.onMessage('error', (data) => {
+      this.emit('networkError', data)
+    })
+
+    return this.room
+  }
+
   async createPrivateRoom() {
     this.leaveRoom()
     this._isBotMatch = false
