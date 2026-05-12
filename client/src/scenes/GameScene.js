@@ -368,8 +368,12 @@ export default class GameScene extends Phaser.Scene {
             entity.updateHPFromServer(player.hp, player.maxHp, player.isAlive);
             entity.updateStatusFromServer(player.statusEffect || '', player.statusDuration || 0);
         });
+        this.projectileSystem.setWindForce(state.windForce || 0);
         state.projectiles.forEach((proj, projId) => {
-            if (!this.projectileSystem.hasProjectile(projId)) {
+            if (this.projectileSystem.hasProjectile(projId)) {
+                this.projectileSystem.syncProjectilePosition(projId, proj);
+            }
+            else {
                 this.projectileSystem.createProjectile(projId, proj);
             }
         });

@@ -22,6 +22,7 @@ export class GameRoom extends Room<GameRoomSchema> {
   private timesDefended: Map<string, number> = new Map()
   private roomCode: string = ''
   private botPlayer: BotPlayer | null = null
+  private defenseMoveTimer?: NodeJS.Timeout
   private readyPlayers: Set<string> = new Set()
 
   onCreate(options: any) {
@@ -72,7 +73,11 @@ export class GameRoom extends Room<GameRoomSchema> {
       const player = this.state.players.get(client.sessionId)
       if (player && this.isPlayerTurn(player) && player.isAlive) {
         this.hasThrownThisTurn = true
+        this.stopBotDefenseMovement()
         this.handleThrow(player, data)
+        if (this.botPlayer) {
+          this.botPlayer.observeHumanThrow(data.angle || 0, data.power || 0.5)
+        }
       }
     })
 
@@ -205,6 +210,9 @@ export class GameRoom extends Room<GameRoomSchema> {
       const maxEnergy = ENERGY.base + Math.floor(missingHp / 30) * ENERGY.bonusPerMissing30Hp
       const used = this.timesDefended.get(defender.id) || 0
       defender.energy = Math.max(0, maxEnergy - used)
+      if (this.botPlayer && defender.id === 'bot') {
+        this.botPlayer.setDefendPosition(defender.x)
+      }
     }
 
     this.broadcast("turnStart", { playerId: currentPlayerId, timeLeft: turnTime })
@@ -230,6 +238,11 @@ export class GameRoom extends Room<GameRoomSchema> {
           }
         }, delay)
       }
+    }
+
+    // Bot defense movement: move around when human is about to throw
+    if (this.botPlayer && currentPlayerId !== 'bot' && defender?.id === 'bot') {
+      this.startBotDefenseMovement()
     }
   }
 
@@ -261,6 +274,8 @@ const velocityY = Math.sin(radians) * power * THROW_SPEED
     this.simulateProjectile(projectile.id)
   }
 
+  private dodgeTick: number = 0
+
   private simulateProjectile(projectileId: string) {
     const projectile = this.state.projectiles.get(projectileId)
     if (!projectile) return
@@ -272,23 +287,25 @@ const velocityY = Math.sin(radians) * power * THROW_SPEED
       projectile.velocityY += GRAVITY / 60
       projectile.velocityX += this.state.windForce / 60
 
-      // Check collision with ground
-      if (projectile.y >= GROUND_Y) {
-        this.handleProjectileHit(projectile, null)
-        clearInterval(interval)
-        this.state.projectiles.delete(projectileId)
-        return
+      // Bot dodge logic — every 8 ticks (~130ms) when projectile isn't bot's own
+      this.dodgeTick++
+      if (this.botPlayer && projectile.ownerId !== 'bot' && this.dodgeTick % 8 === 0) {
+        const bot = this.botPlayer.player
+        const playerIds = Array.from(this.state.players.keys())
+        const isBotTurn = playerIds[this.state.currentTurn] === 'bot'
+        if (bot.isAlive && !isBotTurn && this.state.phase === 'playing') {
+          const dodge = this.botPlayer.decideDodge(
+            bot.x, bot.y,
+            projectile.x, projectile.y,
+            projectile.velocityX, projectile.velocityY,
+            this.state.windForce
+          )
+          this.botPlayer.applyDodgeResult(dodge)
+        }
       }
 
-      // Out of bounds check
-      if (projectile.x < -200 || projectile.x > WORLD_WIDTH + 200 || projectile.y < -500) {
-        this.handleProjectileHit(projectile, null)
-        clearInterval(interval)
-        this.state.projectiles.delete(projectileId)
-        return
-      }
-
-      // Check collision with players (swept: check sub-steps between frames)
+      // Check collision with players FIRST (before ground, so fast-falling projectiles
+      // that hit a player and ground in the same frame still register damage)
       let hit = false
       for (const [playerId, player] of this.state.players) {
         if (playerId === projectile.ownerId || !player.isAlive) continue
@@ -319,6 +336,23 @@ const velocityY = Math.sin(radians) * power * THROW_SPEED
       if (hit) {
         clearInterval(interval)
         this.state.projectiles.delete(projectileId)
+        return
+      }
+
+      // Check collision with ground
+      if (projectile.y >= GROUND_Y) {
+        this.handleProjectileHit(projectile, null)
+        clearInterval(interval)
+        this.state.projectiles.delete(projectileId)
+        return
+      }
+
+      // Out of bounds check
+      if (projectile.x < -200 || projectile.x > WORLD_WIDTH + 200 || projectile.y < -500) {
+        this.handleProjectileHit(projectile, null)
+        clearInterval(interval)
+        this.state.projectiles.delete(projectileId)
+        return
       }
     }, 1000 / 60) // 60fps
   }
@@ -476,12 +510,58 @@ const velocityY = Math.sin(radians) * power * THROW_SPEED
       currentPlayer.statusEffect = ""
       currentPlayer.statusDuration = 0
 
+      this.stopBotDefenseMovement()
       this.handleThrow(currentPlayer, { angle: defaultAngle, power: 0.5, skillId: "rock" })
     }
   }
 
+  private stopBotDefenseMovement() {
+    if (this.defenseMoveTimer) {
+      clearTimeout(this.defenseMoveTimer)
+      this.defenseMoveTimer = undefined
+    }
+  }
+
+  private startBotDefenseMovement() {
+    this.stopBotDefenseMovement()
+    const scheduleMove = () => {
+      if (!this.botPlayer || this.state.phase !== 'playing') {
+        this.stopBotDefenseMovement()
+        return
+      }
+      const bot = this.botPlayer
+      if (!bot.player.isAlive) return
+
+      const defendStartX = bot.getDefendStartX()
+      const defendRange = bot.getDefendRange()
+      const minX = Math.max(50, defendStartX - defendRange)
+      const maxX = Math.min(2510, defendStartX + defendRange)
+
+      const roll = Math.random()
+      if (roll < 0.35) {
+        bot.player.x = Math.max(minX, bot.player.x - 60)
+        bot.player.facingLeft = true
+        bot.player.animState = 'run'
+      } else if (roll < 0.7) {
+        bot.player.x = Math.min(maxX, bot.player.x + 60)
+        bot.player.facingLeft = false
+        bot.player.animState = 'run'
+      } else if (roll < 0.85) {
+        bot.player.isCrouching = !bot.player.isCrouching
+        bot.player.animState = bot.player.isCrouching ? 'crouch' : 'idle'
+      } else {
+        bot.player.isCrouching = false
+        bot.player.animState = 'idle'
+      }
+
+      this.defenseMoveTimer = setTimeout(scheduleMove, 400 + Math.random() * 400)
+    }
+    scheduleMove()
+  }
+
   private nextTurn() {
     if (this.turnTimer) clearInterval(this.turnTimer)
+    this.stopBotDefenseMovement()
 
     // Track if defending player actually moved (dodged)
     const playerIds = Array.from(this.state.players.keys())

@@ -7,12 +7,17 @@ export default class ProjectileSystem {
   private projectiles: Map<string, Phaser.Physics.Arcade.Sprite>
   private particles: Map<string, Phaser.GameObjects.Particles.ParticleEmitter>
   private destroyedIds: Set<string>
+  private currentWindForce: number = 0
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene
     this.projectiles = new Map()
     this.particles = new Map()
     this.destroyedIds = new Set()
+  }
+
+  setWindForce(force: number) {
+    this.currentWindForce = force
   }
 
   createProjectile(projectileId: string, projData: any) {
@@ -23,11 +28,26 @@ export default class ProjectileSystem {
     proj.setData('projectileId', projectileId)
     proj.setData('type', projData.type)
     const body = proj.body as Phaser.Physics.Arcade.Body
-    if (body) body.setGravityY(680)
+    if (body) {
+      body.setGravityY(PHYSICS.gravity)
+      body.setAcceleration(this.currentWindForce, 0)
+    }
 
     this.addTrail(proj, projData.type)
     this.projectiles.set(projectileId, proj)
     this.timeEventCheck(projectileId)
+  }
+
+  syncProjectilePosition(projId: string, serverProj: any) {
+    const proj = this.projectiles.get(projId)
+    if (proj && proj.active) {
+      proj.setPosition(serverProj.x, serverProj.y)
+      proj.setVelocity(serverProj.velocityX, serverProj.velocityY)
+      const body = proj.body as Phaser.Physics.Arcade.Body
+      if (body) {
+        body.setAcceleration(this.currentWindForce, 0)
+      }
+    }
   }
 
   private getTextureForKey(type: string): string | undefined {
