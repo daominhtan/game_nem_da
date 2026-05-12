@@ -5,7 +5,8 @@ export default class NetworkManager {
         this.messageHandlers = new Map();
         this._isBotMatch = false;
         this.playerName = '';
-        const serverUrl = import.meta.env.VITE_SERVER_URL || 'ws://localhost:2567';
+        const envUrl = import.meta.env.VITE_SERVER_URL;
+        const serverUrl = envUrl || `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}`;
         this.client = new Client(serverUrl);
     }
     static getInstance() {

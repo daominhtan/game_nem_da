@@ -13,7 +13,8 @@ export default class NetworkManager {
   public playerName: string = ''
 
   private constructor() {
-    const serverUrl = (import.meta as any).env.VITE_SERVER_URL || 'ws://localhost:2567'
+    const envUrl = (import.meta as any).env.VITE_SERVER_URL
+    const serverUrl = envUrl || `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}`
     this.client = new Client(serverUrl)
   }
 
