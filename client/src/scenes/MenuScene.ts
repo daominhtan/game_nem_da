@@ -8,13 +8,22 @@ export default class MenuScene extends Phaser.Scene {
   private codeInput?: Phaser.GameObjects.Text
   private inputCode: string = ''
   private playerName: string = ''
+  private menuHandlers: Array<{ event: string; handler: (data: any) => void }> = []
 
   constructor() {
     super('MenuScene')
     this.network = NetworkManager.getInstance()
   }
 
+  private cleanupHandlers() {
+    for (const { event, handler } of this.menuHandlers) {
+      this.network.off(event, handler)
+    }
+    this.menuHandlers = []
+  }
+
   create() {
+    this.cleanupHandlers()
     const { width, height } = this.cameras.main
 
     this.add.image(width / 2, height / 2, 'bg_menu')
@@ -170,18 +179,28 @@ export default class MenuScene extends Phaser.Scene {
     this.showStatus('Đang tìm trận...')
     try {
       await this.network.joinMatchmaking()
-      this.network.on('queueUpdate', (data: any) => {
+
+      const onQueueUpdate = (data: any) => {
         this.showStatus(`Đang chờ người chơi... (${data.position}/2)`)
-      })
-      this.network.on('matchFound', () => {
-        this.network.off('matchFound', () => {})
-        this.network.off('queueUpdate', () => {})
+      }
+      const onMatchFound = () => {
+        this.network.off('matchFound', onMatchFound)
+        this.network.off('queueUpdate', onQueueUpdate)
         this.showStatus('Đã tìm thấy đối thủ!')
         this.scene.start('CharacterSelectScene')
-      })
-      this.network.on('networkError', (data: any) => {
+      }
+      const onNetworkError = (data: any) => {
         this.showStatus(data.message || 'Lỗi kết nối!')
-      })
+      }
+
+      this.network.on('queueUpdate', onQueueUpdate)
+      this.network.on('matchFound', onMatchFound)
+      this.network.on('networkError', onNetworkError)
+      this.menuHandlers.push(
+        { event: 'queueUpdate', handler: onQueueUpdate },
+        { event: 'matchFound', handler: onMatchFound },
+        { event: 'networkError', handler: onNetworkError }
+      )
     } catch (err) {
       this.showStatus('Lỗi kết nối! Thử lại.')
     }
@@ -191,19 +210,29 @@ export default class MenuScene extends Phaser.Scene {
     this.showStatus('Đang tạo phòng...')
     try {
       await this.network.createPrivateRoom()
-      this.network.on('roomCreated', (data: any) => {
+
+      const onRoomCreated = (data: any) => {
         this.showRoomCode(data.code)
         this.showStatus('Đang chờ người tham gia...')
-      })
-      this.network.on('networkError', (data: any) => {
+      }
+      const onNetworkError = (data: any) => {
         this.showStatus(data.message || 'Lỗi tạo phòng!')
-      })
-      this.network.on('phaseChange', (data: any) => {
+      }
+      const onPhaseChange = (data: any) => {
         if (data.current === 'selecting' || data.current === 'countdown' || data.current === 'playing') {
           this.showStatus('Đã có người tham gia!')
           this.scene.start('CharacterSelectScene')
         }
-      })
+      }
+
+      this.network.on('roomCreated', onRoomCreated)
+      this.network.on('networkError', onNetworkError)
+      this.network.on('phaseChange', onPhaseChange)
+      this.menuHandlers.push(
+        { event: 'roomCreated', handler: onRoomCreated },
+        { event: 'networkError', handler: onNetworkError },
+        { event: 'phaseChange', handler: onPhaseChange }
+      )
     } catch (err) {
       this.showStatus('Lỗi kết nối!')
     }
@@ -335,14 +364,22 @@ export default class MenuScene extends Phaser.Scene {
     this.showStatus('Đang tham gia phòng...')
     try {
       await this.network.joinByCode(code)
-      this.network.on('matchFound', () => {
-        this.network.off('matchFound', () => {})
+
+      const onMatchFound = () => {
+        this.network.off('matchFound', onMatchFound)
         this.showStatus('Đã vào phòng!')
         this.scene.start('CharacterSelectScene')
-      })
-      this.network.on('networkError', (data: any) => {
+      }
+      const onNetworkError = (data: any) => {
         this.showStatus(data.message || 'Mã phòng không hợp lệ!')
-      })
+      }
+
+      this.network.on('matchFound', onMatchFound)
+      this.network.on('networkError', onNetworkError)
+      this.menuHandlers.push(
+        { event: 'matchFound', handler: onMatchFound },
+        { event: 'networkError', handler: onNetworkError }
+      )
     } catch (err) {
       this.showStatus('Không tìm thấy phòng!')
     }

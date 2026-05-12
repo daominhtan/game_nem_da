@@ -25,6 +25,7 @@ export default class GameScene extends Phaser.Scene {
   private skillBarRects: Phaser.GameObjects.Rectangle[] = []
   private skillBarCreated: boolean = false
   private sfx: SoundManager
+  private networkHandlers: Array<{ event: string; handler: (data: any) => void }> = []
 
   private farBg?: Phaser.GameObjects.TileSprite
   private midBg?: Phaser.GameObjects.TileSprite
@@ -52,6 +53,10 @@ export default class GameScene extends Phaser.Scene {
   }
 
   private cleanup() {
+    for (const { event, handler } of this.networkHandlers) {
+      this.network.off(event, handler)
+    }
+    this.networkHandlers = []
     this.players.clear()
     this.skillBarRects = []
     this.skillBarCreated = false
@@ -579,13 +584,18 @@ export default class GameScene extends Phaser.Scene {
   }
 
   private setupNetworkListeners() {
-    this.network.on('playerJoin', ({ player, key }: any) => {
+    const onEvent = (event: string, handler: (data: any) => void) => {
+      this.network.on(event, handler)
+      this.networkHandlers.push({ event, handler })
+    }
+
+    onEvent('playerJoin', ({ player, key }: any) => {
       if (!this.players.has(key)) {
         this.createPlayerEntity(key, player)
       }
     })
 
-    this.network.on('playerLeave', ({ key }: any) => {
+    onEvent('playerLeave', ({ key }: any) => {
       const player = this.players.get(key)
       if (player) {
         player.destroy()
@@ -593,7 +603,7 @@ export default class GameScene extends Phaser.Scene {
       }
     })
 
-    this.network.on('turnStart', (data: any) => {
+    onEvent('turnStart', (data: any) => {
       this.isMyTurn = data.playerId === this.myPlayerId
       this.hasThrownThisTurn = false
       if (this.isMyTurn) {
@@ -605,7 +615,7 @@ export default class GameScene extends Phaser.Scene {
       }
     })
 
-    this.network.on('throw', (data: any) => {
+    onEvent('throw', (data: any) => {
       const room = this.network.getRoom()
       if (!room) return
       const proj = room.state.projectiles.get(data.projectileId)
@@ -615,7 +625,7 @@ export default class GameScene extends Phaser.Scene {
       this.sfx.playThrow()
     })
 
-    this.network.on('hit', (data: any) => {
+    onEvent('hit', (data: any) => {
       this.showDamageText(data.targetId, data.damage, data.isCritical)
 
       const isBomb = data.projectileType === 'bomb' || data.projectileType === 'bomb_aoe'
@@ -658,7 +668,7 @@ export default class GameScene extends Phaser.Scene {
       }
     })
 
-    this.network.on('combo', (data: any) => {
+    onEvent('combo', (data: any) => {
       this.sfx.playCombo(data.level || 2)
       if (data.level >= 3) {
         this.showText(`\u{1F525} COMBO x${data.level}!`, 0xff6600)
@@ -667,14 +677,14 @@ export default class GameScene extends Phaser.Scene {
       }
     })
 
-    this.network.on('death', (data: any) => {
+    onEvent('death', (data: any) => {
       this.cameras.main.shake(200, 0.005)
       this.sfx.playDeath()
       const victim = this.players.get(data.targetId)
       if (victim) victim.playAnimation('die')
     })
 
-    this.network.on('timeout', (data: any) => {
+    onEvent('timeout', (data: any) => {
       this.sfx.playTimeout()
       if (data.playerId === this.myPlayerId) {
         this.showText(data.isStunned ? 'BỊ CHOÁNG! NÉM TỰ ĐỘNG!' : 'HẾT GIỜ!', 0xff0000)
@@ -685,33 +695,32 @@ export default class GameScene extends Phaser.Scene {
       }
     })
 
-    this.network.on('roundEnd', (data: any) => {
+    onEvent('roundEnd', (data: any) => {
+      const p1Label = data.winnerId ? '' : 'HOÀ!'
+      this.showText(p1Label || 'KẾT THÚC ROUND!', 0xffff00)
+    })
+
+    onEvent('gameEnd', (data: any) => {
       this.time.delayedCall(3000, () => {
+        if (this.scene.isActive('ResultScene')) return
         this.scene.stop('UIScene')
         this.scene.start('ResultScene', data)
       })
     })
 
-    this.network.on('gameEnd', (data: any) => {
-      this.time.delayedCall(3000, () => {
-        this.scene.stop('UIScene')
-        this.scene.start('ResultScene', data)
-      })
-    })
-
-    this.network.on('emoji', (data: any) => {
+    onEvent('emoji', (data: any) => {
       this.sfx.playEmoji()
       const player = this.players.get(data.playerId)
       if (player) player.showEmoji(data.emoji)
     })
 
-    this.network.on('taunt', (data: any) => {
+    onEvent('taunt', (data: any) => {
       this.sfx.playTaunt()
       const player = this.players.get(data.playerId)
       if (player) player.playAnimation('taunt')
     })
 
-    this.network.on('statusEffect', (data: any) => {
+    onEvent('statusEffect', (data: any) => {
       const player = this.players.get(data.playerId)
       if (player) {
         player.showStatusEffect(data.effect)
@@ -723,7 +732,7 @@ export default class GameScene extends Phaser.Scene {
       }
     })
 
-    this.network.on('windChange', (data: any) => {
+    onEvent('windChange', (data: any) => {
       this.aimSystem.setWindForce(data.force)
     })
   }

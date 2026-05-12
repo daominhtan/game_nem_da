@@ -541,7 +541,9 @@ const velocityY = Math.sin(radians) * power * THROW_SPEED
       setTimeout(() => {
         this.state.phase = "gameEnd"
         this.broadcast("gameEnd", {
-          winnerId: this.state.p1RoundsWon >= 2 ? playerIds[0] : playerIds[1]
+          winnerId: this.state.p1RoundsWon >= 2 ? playerIds[0] : playerIds[1],
+          p1RoundsWon: this.state.p1RoundsWon,
+          p2RoundsWon: this.state.p2RoundsWon
         })
       }, 3000)
     } else {
