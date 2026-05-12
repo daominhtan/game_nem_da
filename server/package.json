@@ -10,7 +10,8 @@
   },
   "dependencies": {
     "@colyseus/monitor": "^0.15.0",
-    "colyseus": "^0.15.0"
+    "colyseus": "^0.15.0",
+    "http-proxy-middleware": "^4.0.0"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",

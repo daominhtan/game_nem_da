@@ -23,7 +23,7 @@ export default class BootScene extends Phaser.Scene {
             { key: 'warrior', color: '#2196F3', darkColor: '#1565C0', darkerColor: '#0D47A1' },
             { key: 'mage', color: '#9C27B0', darkColor: '#7B1FA8', darkerColor: '#4A148C' },
             { key: 'samurai', color: '#F44336', darkColor: '#D32F2F', darkerColor: '#B71C1C' },
-            { key: 'bear', color: '#795548', darkColor: '#5D4037', darkerColor: '#3E2723' }
+            { key: 'bear', color: '#8D6E63', darkColor: '#6D4C41', darkerColor: '#4E342E' }
         ];
         characters.forEach(char => {
             if (this.textures.exists(char.key))
@@ -34,19 +34,205 @@ export default class BootScene extends Phaser.Scene {
             const ctx = canvas.getContext('2d');
             if (!ctx)
                 return;
-            ctx.fillStyle = char.color;
-            ctx.fillRect(16, 10, 32, 30);
-            ctx.fillStyle = char.darkColor;
-            ctx.fillRect(12, 40, 40, 25);
-            ctx.fillStyle = char.darkerColor;
-            ctx.fillRect(16, 65, 12, 12);
-            ctx.fillRect(36, 65, 12, 12);
-            ctx.fillStyle = '#fff';
-            ctx.fillRect(22, 18, 8, 8);
-            ctx.fillRect(34, 18, 8, 8);
-            ctx.fillStyle = '#000';
-            ctx.fillRect(24, 20, 4, 4);
-            ctx.fillRect(36, 20, 4, 4);
+            switch (char.key) {
+                case 'warrior':
+                    // Helmet
+                    ctx.fillStyle = char.darkerColor;
+                    ctx.fillRect(14, 1, 36, 14);
+                    ctx.fillRect(12, 8, 40, 6);
+                    // Visor slit
+                    ctx.fillStyle = '#000';
+                    ctx.fillRect(20, 10, 24, 3);
+                    // Face
+                    ctx.fillStyle = char.color;
+                    ctx.fillRect(16, 15, 32, 16);
+                    // Eyes
+                    ctx.fillStyle = '#fff';
+                    ctx.fillRect(22, 19, 6, 6);
+                    ctx.fillRect(36, 19, 6, 6);
+                    ctx.fillStyle = '#000';
+                    ctx.fillRect(24, 21, 3, 3);
+                    ctx.fillRect(38, 21, 3, 3);
+                    // Body
+                    ctx.fillStyle = char.darkColor;
+                    ctx.fillRect(12, 31, 40, 22);
+                    // Belt
+                    ctx.fillStyle = char.darkerColor;
+                    ctx.fillRect(12, 42, 40, 5);
+                    // Legs
+                    ctx.fillStyle = char.darkColor;
+                    ctx.fillRect(16, 53, 12, 14);
+                    ctx.fillRect(36, 53, 12, 14);
+                    // Boots
+                    ctx.fillStyle = char.darkerColor;
+                    ctx.fillRect(14, 65, 16, 7);
+                    ctx.fillRect(34, 65, 16, 7);
+                    break;
+                case 'mage':
+                    // Hat point
+                    ctx.fillStyle = char.darkerColor;
+                    ctx.beginPath();
+                    ctx.moveTo(32, 1);
+                    ctx.lineTo(10, 22);
+                    ctx.lineTo(54, 22);
+                    ctx.closePath();
+                    ctx.fill();
+                    // Hat brim
+                    ctx.fillStyle = char.darkColor;
+                    ctx.fillRect(6, 22, 52, 5);
+                    // Hat band
+                    ctx.fillRect(10, 18, 44, 4);
+                    // Face
+                    ctx.fillStyle = char.color;
+                    ctx.fillRect(16, 27, 32, 14);
+                    // Glowing eyes
+                    ctx.fillStyle = '#E1BEE7';
+                    ctx.fillRect(22, 31, 6, 5);
+                    ctx.fillRect(36, 31, 6, 5);
+                    ctx.fillStyle = '#fff';
+                    ctx.fillRect(24, 32, 3, 3);
+                    ctx.fillRect(38, 32, 3, 3);
+                    // Beard
+                    ctx.fillStyle = '#BDBDBD';
+                    ctx.fillRect(18, 39, 28, 8);
+                    // Robe (trapezoid)
+                    ctx.fillStyle = char.darkColor;
+                    ctx.beginPath();
+                    ctx.moveTo(12, 45);
+                    ctx.lineTo(52, 45);
+                    ctx.lineTo(58, 68);
+                    ctx.lineTo(6, 68);
+                    ctx.closePath();
+                    ctx.fill();
+                    // Robe trim
+                    ctx.fillStyle = char.darkerColor;
+                    ctx.fillRect(6, 63, 52, 5);
+                    // Staff (vertical line on right side)
+                    ctx.strokeStyle = char.darkerColor;
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.moveTo(56, 20);
+                    ctx.lineTo(58, 67);
+                    ctx.stroke();
+                    // Staff gem
+                    ctx.fillStyle = '#CE93D8';
+                    ctx.beginPath();
+                    ctx.arc(56, 18, 4, 0, Math.PI * 2);
+                    ctx.fill();
+                    break;
+                case 'samurai':
+                    // Crest (top triangle)
+                    ctx.fillStyle = char.darkerColor;
+                    ctx.beginPath();
+                    ctx.moveTo(32, 1);
+                    ctx.lineTo(22, 10);
+                    ctx.lineTo(42, 10);
+                    ctx.closePath();
+                    ctx.fill();
+                    // Helmet
+                    ctx.fillStyle = char.darkerColor;
+                    ctx.fillRect(14, 6, 36, 12);
+                    ctx.fillRect(10, 14, 44, 4);
+                    // Face
+                    ctx.fillStyle = char.color;
+                    ctx.fillRect(18, 18, 28, 14);
+                    // Narrow eyes
+                    ctx.fillStyle = '#000';
+                    ctx.fillRect(22, 23, 8, 2);
+                    ctx.fillRect(34, 23, 8, 2);
+                    // Mouth
+                    ctx.fillStyle = '#000';
+                    ctx.fillRect(26, 30, 12, 2);
+                    // Shoulder armor
+                    ctx.fillStyle = char.darkerColor;
+                    ctx.fillRect(4, 26, 14, 18);
+                    ctx.fillRect(46, 26, 14, 18);
+                    // Body
+                    ctx.fillStyle = char.darkColor;
+                    ctx.fillRect(16, 30, 32, 16);
+                    // Belt
+                    ctx.fillStyle = char.darkerColor;
+                    ctx.fillRect(16, 44, 32, 4);
+                    // Legs
+                    ctx.fillStyle = char.darkColor;
+                    ctx.fillRect(18, 48, 12, 14);
+                    ctx.fillRect(34, 48, 12, 14);
+                    // Boots
+                    ctx.fillStyle = char.darkerColor;
+                    ctx.fillRect(16, 60, 14, 8);
+                    ctx.fillRect(34, 60, 14, 8);
+                    break;
+                case 'bear':
+                    // Ears
+                    ctx.fillStyle = char.darkColor;
+                    ctx.beginPath();
+                    ctx.arc(16, 14, 7, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.beginPath();
+                    ctx.arc(48, 14, 7, 0, Math.PI * 2);
+                    ctx.fill();
+                    // Inner ears
+                    ctx.fillStyle = char.darkerColor;
+                    ctx.beginPath();
+                    ctx.arc(16, 14, 4, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.beginPath();
+                    ctx.arc(48, 14, 4, 0, Math.PI * 2);
+                    ctx.fill();
+                    // Head
+                    ctx.fillStyle = char.color;
+                    ctx.beginPath();
+                    ctx.arc(32, 26, 18, 0, Math.PI * 2);
+                    ctx.fill();
+                    // Eyes
+                    ctx.fillStyle = '#fff';
+                    ctx.beginPath();
+                    ctx.arc(24, 24, 4, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.beginPath();
+                    ctx.arc(40, 24, 4, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.fillStyle = '#000';
+                    ctx.beginPath();
+                    ctx.arc(24, 24, 2, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.beginPath();
+                    ctx.arc(40, 24, 2, 0, Math.PI * 2);
+                    ctx.fill();
+                    // Snout
+                    ctx.fillStyle = char.darkColor;
+                    ctx.beginPath();
+                    ctx.ellipse(32, 32, 8, 5, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                    // Nose
+                    ctx.fillStyle = '#000';
+                    ctx.beginPath();
+                    ctx.ellipse(32, 30, 3, 2, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                    // Body
+                    ctx.fillStyle = char.darkColor;
+                    ctx.beginPath();
+                    ctx.ellipse(32, 48, 20, 16, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                    // Belly
+                    ctx.fillStyle = char.color;
+                    ctx.beginPath();
+                    ctx.ellipse(32, 50, 12, 10, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                    // Arms
+                    ctx.fillStyle = char.darkColor;
+                    ctx.fillRect(6, 38, 10, 16);
+                    ctx.fillRect(48, 38, 10, 16);
+                    // Legs
+                    ctx.fillStyle = char.darkColor;
+                    ctx.fillRect(16, 60, 13, 10);
+                    ctx.fillRect(35, 60, 13, 10);
+                    // Paws
+                    ctx.fillStyle = char.darkerColor;
+                    ctx.fillRect(14, 68, 15, 6);
+                    ctx.fillRect(35, 68, 15, 6);
+                    break;
+            }
             this.textures.addCanvas(char.key, canvas);
         });
     }
