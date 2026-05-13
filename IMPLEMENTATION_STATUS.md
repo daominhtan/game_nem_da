@@ -1,6 +1,6 @@
 # Implementation Status - Ném Đá Online
 
-## ✅ Completed Features
+## ✅ Completed Features (Verified from Actual Code)
 
 ### Core Systems
 - [x] Colyseus Schema & Server State (PlayerSchema, ProjectileSchema, GameRoomSchema)
@@ -13,10 +13,11 @@
 
 ### Scenes
 - [x] BootScene (placeholder textures at runtime)
-- [x] MenuScene (title + "Bắt Đầu" button)
-- [x] CharacterSelect (grid 2x2, character stats)
+- [x] MenuScene (title + buttons: Tìm Trận, Tạo Phòng, Chơi Với Bot, Tham Gia Phòng)
+- [x] CharacterSelect (grid 2x2, character stats, 30s timer, ready button)
 - [x] GameScene (core gameplay, turn indicators, damage text, HUD)
-- [x] ResultScene (Win/Lose display)
+- [x] UIScene (HP bars, timer, wind, skill bar, energy pips, round indicators)
+- [x] ResultScene (Win/Lose display + Chơi Lại/Về Menu)
 
 ### Characters
 - [x] Warrior (HP 120, Speed 180, skills: rock/big_rock/bomb/soap)
@@ -26,9 +27,12 @@
 
 ### Skills System
 - [x] 12 skill types on server (rock, big_rock, bomb, soap, pillow, fireball, wind_blade, shuriken, hug_rush, honey, rock_rain, triple_rock)
-- [x] All skills with correct damage, AoE, status effects
+- [x] Basic damage values for all skills
+- [x] Bomb AoE (80px radius with distance falloff)
+- [x] Status effects: soap→stunned, pillow→sleeping, honey→slowed, wind_blade→wind_shield
 - [x] Cooldown tracking on client
-- [x] SKILL_DATA config
+- [x] SKILL_DATA config in shared constants
+- [x] Wake sleeping player on hit
 
 ### VFX & Audio
 - [x] Particle trails per projectile type (bomb: fire, soap: bubbles, fireball: embers)
@@ -46,86 +50,107 @@
 - [x] Ground physics fix (world bounds, enemy no gravity, local player gravity)
 - [x] Status effects (stunned/sleeping/slowed) with full VFX + timer countdown
 
+### Matchmaking & Room System
+- [x] Matchmaking queue (joinQueue, leaveQueue, auto-match when ≥2 players)
+- [x] 15s queue timeout → bot match fallback
+- [x] Room code generation (6 characters: A-Z, 2-9)
+- [x] Room creation (Tạo Phòng) with code display + clipboard copy
+- [x] Room join by code (Tham Gia Phòng)
+- [x] Bot match mode (Chơi Với Bot)
+- [x] Room state machine: waiting → selecting → countdown → playing → roundEnd → gameEnd
+- [x] Phase transitions: countdown 3s, round summary 3s, automatic next round
+
+### Bot Player
+- [x] BotPlayer class with character selection, skill rotation, cooldown tracking
+- [x] Angle/power calculation (optimal angle using physics discriminant)
+- [x] Weighted random skill selection
+- [x] Bot dodge logic (predicts projectile, decides move/jump/crouch)
+- [x] Bot defense movement (random walk + crouch)
+- [x] Bot observes human throw for mirror attacks
+
+### Wind System
+- [x] Random wind per turn (-150 to 150)
+- [x] Wind applied to projectile physics
+- [x] Wind broadcast to client + direction indicator in HUD
+
+### Crouch & Energy System
+- [x] Defender crouch mechanic (down arrow, 3s duration, tint + squash)
+- [x] Energy pips (HP-based, max 8, decremented per defense)
+- [x] Crouch reduces hit radius by 50%
+- [x] UI energy display
+
+### Parallax & Environment
+- [x] 3-layer parallax (far ×0.05, mid ×0.2, near ×0.5) with procedural textures
+- [x] Cloud movement (3-5 clouds, random speed/drift)
+- [x] Floating dust particles + leaf particles
+- [x] Day sky gradient background (mountains, hills, trees, bushes)
+
+### Platforms & Collision
+- [x] Main ground (y=580, grass+dirt texture, width=2560)
+- [x] Floating platforms (left, center, right)
+- [x] Camera bounds 0..2560, lerp follow (factor 0.08)
+- [x] Spawn points (P1: x=800, P2: x=1760)
+- [x] Platform collision for local player (Arcade physics)
+
 ### Bug Fixes
-- [x] Multi-throw spam (hasThrownThisTurn flag on server + client)
-- [x] "Chơi lại" render nhân vật (scene shutdown cleanup + leaveRoom)
-- [x] "Chơi lại" render lực/hướng (recreate AimSystem/ProjectileSystem in create())
+- [x] Multi-throw spam (hasThrownThisTurn flag)
+- [x] Replay cleanup (scene shutdown + leaveRoom + recreate systems)
+- [x] Camera scroll + aim position recalculation
 
 ### UI
-- [x] Skill selection bar (bottom, colored icons, number keys 1-4, cooldown overlay)
-- [x] Turn indicator (countdown bar, texto lớn giữa màn hình)
-- [x] Wind indicator (icon + direction)
-- [x] Damage floating text (font đỏ, bay lên, fade out)
-- [x] Round indicator (best of 3 circles)
+- [x] Skill selection bar (bottom, colored, number keys 1-4, cooldown arc overlay)
+- [x] Turn indicator (countdown bar, text "LƯỢT CỦA BẠN!")
+- [x] Wind indicator (text + direction arrow)
+- [x] Damage floating text (red, fly up + fade, crit bigger yellow)
+- [x] Round indicator (3 circles, best of 3)
+- [x] HP bars with color thresholds (green/orange/red)
+- [x] Timer with color change + blink at 5s
+- [x] Defender label + player names + energy pips
+- [x] Name input overlay (up to 20 chars)
+- [x] Room code display with copy button
 
 ---
 
-## 📋 Implementation Roadmap
+## ⚠️ Known Gaps
 
-### Phase 1: Status Effects & Polish (Current)
+### Skill Unique Mechanics Missing (6/12 skills)
+- [ ] `big_rock` — Không rơi nhanh hơn (same gravity as all projectiles)
+- [ ] `fireball` — Không khỏi gió (affected by wind same as rock)
+- [ ] `shuriken` — Không ít bị gió (same wind sensitivity)
+- [ ] `hug_rush` — Không lao vào ôm (acts as standard projectile, no self-damage/rush)
+- [ ] `rock_rain` — Không 5 đá nhỏ (fires single projectile)
+- [ ] `triple_rock` — Không 3 hòn đá fan (fires single projectile)
+- [ ] Server-side cooldown enforcement — **MISSING** (cooldown only tracked on client, no server validation)
+- [ ] Server-side character-skill validation — **MISSING** (warrior can throw fireball)
 
-#### Status Effects (Server + Client) — ✅ DONE
-- [x] `stunned` effect (soap hit → 2s không kiểm soát, trượt ngã)
-  - Server: set statusEffect + statusDuration, block move/throw
-  - Client: dizzy rotation + shake + yellow spark particles + timer countdown
-- [x] `sleeping` effect (pillow hit → 2s ngủ, không làm gì được)
-  - Server: set statusEffect, turn shortened to 5s
-  - Client: ZZZ floating text + tint + bob animation
-- [x] `slowed` effect (honey hit → 50% speed trong 3s)
-  - Server: giảm moveSpeed (client-side 50% speed)
-  - Client: tint xanh + trailing ice particles
-- [x] UI status indicator trên đầu nhân vật (icon + timer countdown)
-- [x] Turn auto-shorten (5s) when defender stunned/sleeping
-
-#### Parallax Backgrounds
-- [x] 3-layer parallax (far ×0.05, mid ×0.2, near ×0.5)
-- [x] Cloud movement (3-5 đám mây trôi)
-- [x] Floating dust particles (10-15 hạt bụi)
-- [x] Leaf particles (rơi mỗi 3-5s)
-- [ ] Wind-affected particles (bụi bay theo windForce)
-
-#### Platform Tilemaps
-- [x] Tiled JSON map support → procedural tilemap textures (2560×720)
-- [x] Layer 1: Background (cây, núi, mây) → parallax far + mid layers
-- [x] Layer 2: Terrain collision (đất nền, platforms)
-- [x] Layer 3: Decoration (cỏ, hoa, bướm) → parallax near layer
-- [x] Main ground (y=580, full width 2560px)
-- [x] Floating platforms (giữa: y=450, trái: y=500, phải: y=500)
-- [x] Camera bounds 0..2560, lerp follow cả 2 players
-- [x] Spawn points (P1: x=800, P2: x=1760)
+### Server Validation Gaps
+- [ ] Move handler doesn't check `player.statusEffect` — stunned/sleeping players can still move
+- [ ] No speed limit check (client positions blindly accepted)
+- [ ] No emoji whitelist or cooldown (any emoji data broadcast as-is)
+- [ ] No angle/power validation on throw (trusts client 100%)
+- [ ] No rate limiting (max messages/second)
 
 ---
 
-### Phase 2: Room & Matchmaking
+## 📋 Implementation Roadmap (Next Phases)
 
-#### Auto Match Queue
-- [ ] Server matchmaking queue (joinQueue, leaveQueue)
-- [ ] Auto-match khi có 2 players trong queue
-- [ ] 15s timeout → tạo bot match nếu không tìm thấy người
-- [ ] Queue position indicator trên client
+### Phase 2: Room & Matchmaking Polish
 
-#### Room System
-- [ ] Room code generation (6 ký tự, dễ nhập: "ABCD12")
-- [ ] Public/Private room toggle
-- [ ] "TẠO PHÒNG" → tạo room, hiển thị code
-- [ ] "THAM GIA PHÒNG" → nhập code → join
-- [ ] Room states: waiting → selecting → countdown → playing → roundEnd → gameEnd
-- [ ] 30s character select timer
-- [ ] Ready check (cả 2 ready → countdown)
-- [ ] Auto-random character nếu hết giờ chưa chọn
+#### Room System Improvements
+- [ ] Public/Private room toggle (currently code-based private only)
+- [ ] 30s character select timer (currently waits indefinitely)
+- [ ] Auto-random character if timer expires
 
-#### Bot System
-- [ ] BotPlayer class (tính góc + power, random skill)
-- [ ] Bot difficulty levels (dễ: random 0.4-0.7, khó: aim chính xác 0.8-1.0)
-- [ ] Bot taunt/emoji ngẫu nhiên (tạo cảm giác người thật)
+#### Bot System Improvements
+- [ ] Bot difficulty levels (easy: random 0.4-0.7, hard: precise aim 0.8-1.0)
+- [ ] Bot taunt/emoji random (feel more human)
 - [ ] Bot disconnect handling
 
-#### Reconnect System
+#### Reconnect System (Not Started)
 - [ ] Server detect disconnect (WebSocket close)
-- [ ] 30s reconnect window
-- [ ] Pause game khi có người disconnect
-- [ ] Gửi full state khi reconnect thành công
-- [ ] Auto-win nếu không reconnect kịp
+- [ ] 30s reconnect window with game pause
+- [ ] Full state sync on reconnect
+- [ ] Auto-win if reconnect fails
 
 ---
 
