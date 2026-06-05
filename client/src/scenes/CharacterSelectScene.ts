@@ -106,7 +106,7 @@ export default class CharacterSelectScene extends Phaser.Scene {
         this.selectCharacter(index, cards)
       })
 
-      const sprite = this.add.sprite(0, -50, char.id)
+      const sprite = this.add.sprite(0, -50, 'char_' + char.id)
       sprite.setScale(2)
       const name = this.add.text(0, 40, char.name, { fontSize: '14px', color: '#fff', align: 'center' }).setOrigin(0.5)
       const hpText = this.add.text(0, 60, `HP: ${char.hp}`, { fontSize: '14px', color: '#4CAF50' }).setOrigin(0.5)

@@ -14,8 +14,6 @@ export default class PlayerEntity {
   private yellowTargetPercent: number
   private statusText?: Phaser.GameObjects.Text
   private statusTimerText?: Phaser.GameObjects.Text
-  private idleTween?: Phaser.Tweens.Tween
-  private breathTime: number = 0
   private wasOnFloor: boolean = true
   private statusEffect: string = ''
   private statusEffectDuration: number = 0
@@ -30,14 +28,17 @@ export default class PlayerEntity {
   private crouchIndicator?: Phaser.GameObjects.Text
   private crouchTimer?: Phaser.Time.TimerEvent
   private readonly CROUCH_DURATION = 3000
+  private lastAnim: string = ''
+  private texKey: string
 
   constructor(scene: Phaser.Scene, state: PlayerState, isLocal: boolean = false) {
     this.playerState = state
     this.targetX = state.x
     this.targetY = state.y
     this.yellowTargetPercent = state.hp / state.maxHp
+    this.texKey = 'char_' + (state.characterId || 'warrior')
 
-    this.sprite = scene.physics.add.sprite(state.x, state.y, state.characterId || 'warrior')
+    this.sprite = scene.physics.add.sprite(state.x, state.y, this.texKey)
     this.sprite.setScale(2)
     this.sprite.setDepth(50)
 
@@ -47,7 +48,6 @@ export default class PlayerEntity {
     body.setCollideWorldBounds(true)
     body.setBounce(0.2)
 
-    // Only local player needs gravity - enemy positions are interpolated from server
     if (!isLocal) {
       body.setAllowGravity(false)
     }
@@ -71,6 +71,7 @@ export default class PlayerEntity {
     this.sprite.setFlipX(initialFacingLeft)
     this.playerState.facingLeft = initialFacingLeft
 
+    this.playAnimation('idle')
     this.updateHPBar()
   }
 
@@ -81,7 +82,6 @@ export default class PlayerEntity {
     this.targetX = this.playerState.x
     this.targetY = this.playerState.y
 
-    // Update status text position
     if (this.statusText) {
       this.statusText.setPosition(this.sprite.x, this.sprite.y - 110)
     }
@@ -89,30 +89,19 @@ export default class PlayerEntity {
       this.statusTimerText.setPosition(this.sprite.x, this.sprite.y - 90)
     }
 
-    // Update name & HP text position
     this.nameText.setPosition(this.sprite.x, this.sprite.y - 85)
     this.nameText.setText(this.playerState.name || '')
     this.hpValueText.setPosition(this.sprite.x, this.sprite.y - 62)
     this.hpValueText.setText(`${this.playerState.hp}/${this.playerState.maxHp}`)
 
-    // Crouch y-offset: push sprite down so it sits on the ground
     if (this._isCrouching) {
       this.sprite.y += 18
     }
 
-    // Update crouch indicator position
     if (this.crouchIndicator) {
       this.crouchIndicator.setPosition(this.sprite.x, this.sprite.y - 95)
     }
 
-    // Idle breathing animation (subtle scale oscillation)
-    this.breathTime += delta * 0.003
-    if (!this._isCrouching && (this.playerState.animState === 'idle' || !this.playerState.animState)) {
-      const breathe = 1 + Math.sin(this.breathTime) * 0.015
-      this.sprite.setScale(2 * breathe, 2 / breathe)
-    }
-
-    // Landing squash detection
     const body = this.sprite.body as Phaser.Physics.Arcade.Body
     if (body) {
       if (body.onFloor() && !this.wasOnFloor) {
@@ -124,7 +113,6 @@ export default class PlayerEntity {
     this.updateHPBar()
     this.debugRect.setPosition(this.sprite.x, this.sprite.y)
 
-    // Status effect animations
     if (this.statusEffect === 'stunned') {
       this.stunAngle += delta * 0.008
       this.sprite.x += Math.sin(time * 0.008) * 2.5
@@ -137,6 +125,11 @@ export default class PlayerEntity {
 
     if (this.statusEffect === 'sleeping') {
       this.sprite.y += Math.sin(time * 0.003) * 0.3
+    }
+
+    const targetAnim = this.playerState.animState || 'idle'
+    if (targetAnim !== this.lastAnim) {
+      this.playAnimation(targetAnim)
     }
   }
 
